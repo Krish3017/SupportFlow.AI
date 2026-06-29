@@ -1,0 +1,77 @@
+from typing import Optional, List, Dict, Tuple
+from repositories.base import BaseRepository
+from core.errors import NotFoundError
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+class EmailRepository(BaseRepository):
+
+    def list_emails(
+        self,
+        status: Optional[str] = None,
+        search: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> Tuple[List[Dict], int]:
+
+        query = "SELECT * FROM email_tickets WHERE 1=1"
+        params = []
+
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+
+        if search:
+            query += " AND (subject LIKE ? OR sender_email LIKE ? OR body LIKE ?)"
+            s = f"%{search}%"
+            params.extend([s, s, s])
+
+        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        emails = self._execute_query(query, tuple(params), fetch_all=True)
+
+        count_query = "SELECT COUNT(*) as count FROM email_tickets WHERE 1=1"
+        count_params = []
+
+        if status:
+            count_query += " AND status = ?"
+            count_params.append(status)
+        if search:
+            count_query += " AND (subject LIKE ? OR sender_email LIKE ? OR body LIKE ?)"
+            s = f"%{search}%"
+            count_params.extend([s, s, s])
+
+        count_result = self._execute_query(count_query, tuple(count_params), fetch_one=True)
+        total = count_result['count'] if count_result else 0
+
+        return emails or [], total
+
+    def get_email(self, email_id: int) -> Dict:
+        query = "SELECT * FROM email_tickets WHERE id = ?"
+        result = self._execute_query(query, (email_id,), fetch_one=True)
+
+        if not result:
+            raise NotFoundError(resource="Email", identifier=str(email_id))
+
+        return result
+
+    def update_status(self, email_id: int, status: str, ai_response: Optional[str] = None) -> None:
+        if ai_response:
+            query = "UPDATE email_tickets SET status = ?, ai_response = ? WHERE id = ?"
+            self._execute_query(query, (status, ai_response, email_id))
+        else:
+            query = "UPDATE email_tickets SET status = ? WHERE id = ?"
+            self._execute_query(query, (status, email_id))
+
+    def search_emails(self, query: str, limit: int = 20) -> List[Dict]:
+        search_query = """
+            SELECT * FROM email_tickets
+            WHERE subject LIKE ? OR sender_email LIKE ? OR body LIKE ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        """
+        s = f"%{query}%"
+        results = self._execute_query(search_query, (s, s, s, limit), fetch_all=True)
+        return results or []

@@ -1,0 +1,105 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+venv.bak/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# FastAPI
+.pytest_cache/
+
+# Database files - NEVER COMMIT
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+supportflow.db
+omnisupport.db
+test.db
+*.sqlite
+*.sqlite3
+
+# ChromaDB Vector Store - NEVER COMMIT
+chroma_db/
+*.chroma
+
+# Gmail OAuth Credentials - CRITICAL: NEVER COMMIT
+credentials.json
+token.json
+client_secret*.json
+oauth_token.json
+
+# API Keys and Secrets - NEVER COMMIT
+*.pem
+*.key
+*.cert
+secrets.json
+config.local.json
+
+# Cache
+.cache/
+*.pyc
+*.pyo
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Generated files
+*.generated.*
+*.tmp
+temp/
+tmp/

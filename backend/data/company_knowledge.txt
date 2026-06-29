@@ -1,0 +1,37 @@
+SHOPEASE E-COMMERCE - SUPPORT KNOWLEDGE BASE
+
+=== ORDER & SHIPPING ===
+Standard delivery takes 3-5 business days.
+Express delivery takes 1-2 business days and costs $9.99.
+Orders above $50 qualify for free standard shipping.
+You can track your order using the tracking link sent to your email after dispatch.
+Orders can be cancelled within 1 hour of placement. After that, cancellation is not guaranteed.
+
+=== REFUND & RETURNS ===
+We accept returns within 30 days of delivery.
+Items must be unused and in original packaging to qualify for a return.
+Refunds are processed within 5-7 business days after we receive the returned item.
+Digital products and gift cards are non-refundable.
+To initiate a return, go to My Orders and click Return Item.
+
+=== BILLING & PAYMENTS ===
+We accept Visa, Mastercard, PayPal, and UPI.
+Payments are encrypted and processed securely.
+If you were charged but order was not placed, the amount will be refunded within 3-5 business days.
+You can save multiple payment methods in your account settings.
+
+=== ACCOUNT & PASSWORD ===
+To reset your password, click Forgot Password on the login page.
+A reset link will be sent to your registered email address.
+If you cannot access your email, contact support for identity verification.
+You can update your email, phone, and address from Account Settings.
+
+=== PRODUCT QUESTIONS ===
+All products come with a 1-year manufacturer warranty unless stated otherwise.
+Product specifications are listed on each product page.
+If a product arrives damaged, contact support within 48 hours with photos.
+
+=== COMPLAINT & ESCALATION ===
+For unresolved issues, you can request to speak with a senior support agent.
+Complaints are reviewed within 24-48 hours.
+You can submit a formal complaint via the Help Center under Contact Us.

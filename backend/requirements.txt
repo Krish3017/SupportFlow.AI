@@ -1,0 +1,31 @@
+# FastAPI Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+
+# LangChain & LangGraph
+langchain-groq==0.2.1
+langchain-core==0.3.15
+langchain-community==0.3.10
+langgraph==0.2.45
+
+# Vector Store & Embeddings
+langchain-chroma==0.1.4
+langchain-huggingface==0.1.2
+chromadb==0.5.23
+
+# Data Validation
+pydantic==2.9.2
+
+# Environment Variables
+python-dotenv==1.0.1
+
+# Gmail Integration
+google-api-python-client==2.154.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+
+# Email Service (Resend)
+resend==2.5.0
+
+# Telegram Bot
+python-telegram-bot==21.0.1
