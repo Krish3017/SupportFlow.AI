@@ -1,10 +1,10 @@
 from typing import Optional, List, Dict, Tuple
 from repositories.base import BaseRepository
 from core.errors import NotFoundError
-from utils.filtering import QueryBuilder, SortOrder
 from core.logging_config import get_logger
 
 logger = get_logger(__name__)
+
 
 class CustomerRepository(BaseRepository):
 
@@ -48,26 +48,21 @@ class CustomerRepository(BaseRepository):
 
         customers = self._execute_query(query, tuple(params), fetch_all=True)
 
-        # Count
         count_query = "SELECT COUNT(*) as count FROM customers WHERE 1=1"
         count_params = []
 
         if tier:
             count_query += " AND tier = ?"
             count_params.append(tier)
-
         if sentiment:
             count_query += " AND sentiment = ?"
             count_params.append(sentiment)
-
         if min_risk_score is not None:
             count_query += " AND risk_score >= ?"
             count_params.append(min_risk_score)
-
         if max_risk_score is not None:
             count_query += " AND risk_score <= ?"
             count_params.append(max_risk_score)
-
         if search:
             count_query += " AND (email LIKE ? OR name LIKE ?)"
             search_param = f"%{search}%"
@@ -76,7 +71,7 @@ class CustomerRepository(BaseRepository):
         count_result = self._execute_query(count_query, tuple(count_params), fetch_one=True)
         total = count_result['count'] if count_result else 0
 
-        return customers, total
+        return customers or [], total
 
     def get_customer(self, customer_id: str) -> Optional[Dict]:
         query = "SELECT * FROM customers WHERE id = ?"
@@ -91,7 +86,7 @@ class CustomerRepository(BaseRepository):
         query = """
             SELECT id, subject, status, priority, created_at
             FROM tickets
-            WHERE customer_id = ?
+            WHERE contact_id = ?
             ORDER BY created_at DESC
         """
         tickets = self._execute_query(query, (customer_id,), fetch_all=True)
@@ -100,13 +95,15 @@ class CustomerRepository(BaseRepository):
     def get_customer_conversations(self, customer_id: str) -> List[Dict]:
         query = """
             SELECT
-                c.id,
-                t.channel,
-                c.timestamp as started_at
-            FROM conversations c
-            LEFT JOIN tickets t ON CAST(c.id AS TEXT) = t.id
-            WHERE t.customer_id = ?
-            ORDER BY c.timestamp DESC
+                id,
+                channel,
+                status,
+                started_at,
+                updated_at,
+                (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = conversations.id) as message_count
+            FROM conversations
+            WHERE contact_id = ?
+            ORDER BY updated_at DESC
         """
         conversations = self._execute_query(query, (customer_id,), fetch_all=True)
         return conversations or []
@@ -129,17 +126,19 @@ class CustomerRepository(BaseRepository):
     def get_customer_stats(self, customer_id: str) -> Dict:
         stats_query = """
             SELECT
-                COUNT(*) as total_tickets,
-                SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved_tickets,
-                SUM(CASE WHEN status = 'escalated' THEN 1 ELSE 0 END) as escalated_tickets,
-                SUM(CASE WHEN status IN ('new', 'in_progress') THEN 1 ELSE 0 END) as open_tickets
-            FROM tickets
-            WHERE customer_id = ?
+                (SELECT COUNT(*) FROM conversations WHERE contact_id = ?) as total_conversations,
+                (SELECT COUNT(*) FROM conversations WHERE contact_id = ? AND status = 'resolved') as resolved_conversations,
+                (SELECT COUNT(*) FROM tickets WHERE contact_id = ?) as total_tickets,
+                (SELECT COUNT(*) FROM tickets WHERE contact_id = ? AND status = 'open') as open_tickets
         """
-        stats = self._execute_query(stats_query, (customer_id,), fetch_one=True)
+        stats = self._execute_query(
+            stats_query,
+            (customer_id, customer_id, customer_id, customer_id),
+            fetch_one=True
+        )
         return dict(stats) if stats else {
+            'total_conversations': 0,
+            'resolved_conversations': 0,
             'total_tickets': 0,
-            'resolved_tickets': 0,
-            'escalated_tickets': 0,
             'open_tickets': 0
         }

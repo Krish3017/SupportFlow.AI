@@ -1,17 +1,13 @@
-"""
-Ticket Repository
-Data access layer for tickets
-"""
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Tuple
 from repositories.base import BaseRepository
 from core.logging_config import get_logger
 from core.errors import NotFoundError
-from utils.filtering import QueryBuilder, SortOrder
+from datetime import datetime
 
 logger = get_logger(__name__)
 
+
 class TicketRepository(BaseRepository):
-    """Repository for ticket data operations"""
 
     def list_tickets(
         self,
@@ -22,50 +18,75 @@ class TicketRepository(BaseRepository):
         limit: int = 50,
         offset: int = 0
     ) -> Tuple[List[Dict], int]:
-        """
-        List tickets with filters and pagination
 
-        Returns:
-            Tuple of (ticket list, total count)
+        query = """
+            SELECT
+                t.id,
+                t.conversation_id,
+                t.contact_id,
+                t.subject,
+                t.priority,
+                t.status,
+                t.assignee,
+                t.escalation_reason,
+                t.created_at,
+                t.updated_at,
+                t.resolved_at,
+                c.channel as conversation_channel,
+                cu.email as customer_email,
+                cu.name as customer_name
+            FROM tickets t
+            LEFT JOIN conversations c ON c.id = t.conversation_id
+            LEFT JOIN customers cu ON cu.id = t.contact_id
+            WHERE 1=1
         """
-        # Build filtered query
-        builder = QueryBuilder("SELECT * FROM tickets")
+        params = []
 
         if status:
-            builder.add_filter("status", status)
+            query += " AND t.status = ?"
+            params.append(status)
         if priority:
-            builder.add_filter("priority", priority)
+            query += " AND t.priority = ?"
+            params.append(priority)
         if channel:
-            builder.add_filter("channel", channel)
+            query += " AND c.channel = ?"
+            params.append(channel)
         if search:
-            builder.add_like_filter("subject", search)
+            query += " AND t.subject LIKE ?"
+            params.append(f"%{search}%")
 
-        builder.add_sort("created_at", SortOrder.DESC)
-        builder.add_pagination(limit, offset)
+        query += " ORDER BY t.created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
 
-        query, params = builder.build()
         tickets = self._execute_query(query, tuple(params), fetch_all=True)
 
-        # Get total count
-        count_builder = QueryBuilder("SELECT COUNT(*) as count FROM tickets")
+        count_query = "SELECT COUNT(*) as count FROM tickets WHERE 1=1"
+        count_params = []
         if status:
-            count_builder.add_filter("status", status)
+            count_query += " AND status = ?"
+            count_params.append(status)
         if priority:
-            count_builder.add_filter("priority", priority)
-        if channel:
-            count_builder.add_filter("channel", channel)
-        if search:
-            count_builder.add_like_filter("subject", search)
+            count_query += " AND priority = ?"
+            count_params.append(priority)
 
-        count_query, count_params = count_builder.build()
         count_result = self._execute_query(count_query, tuple(count_params), fetch_one=True)
         total = count_result['count'] if count_result else 0
 
-        return tickets, total
+        return tickets or [], total
 
-    def get_ticket(self, ticket_id: str) -> Optional[Dict]:
-        """Get ticket by ID"""
-        query = "SELECT * FROM tickets WHERE id = ?"
+    def get_ticket(self, ticket_id: str) -> Dict:
+        query = """
+            SELECT
+                t.*,
+                c.channel as conversation_channel,
+                cu.email as customer_email,
+                cu.name as customer_name,
+                (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = t.conversation_id) as message_count
+            FROM tickets t
+            LEFT JOIN conversations c ON c.id = t.conversation_id
+            LEFT JOIN customers cu ON cu.id = t.contact_id
+            WHERE t.id = ?
+        """
         ticket = self._execute_query(query, (ticket_id,), fetch_one=True)
 
         if not ticket:
@@ -74,24 +95,17 @@ class TicketRepository(BaseRepository):
         return ticket
 
     def update_status(self, ticket_id: str, status: str) -> None:
-        """Update ticket status"""
-        # Verify ticket exists
         self.get_ticket(ticket_id)
+        now = datetime.utcnow().isoformat()
 
-        query = "UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?"
-        from datetime import datetime
-        self._execute_query(query, (status, datetime.now().isoformat(), ticket_id))
+        query = "UPDATE tickets SET status = ?, updated_at = ?"
+        params = [status, now]
 
-        logger.info(f"Updated ticket {ticket_id} status to {status}")
+        if status == "resolved":
+            query += ", resolved_at = ?"
+            params.append(now)
 
-    def get_messages(self, ticket_id: str) -> List[Dict]:
-        """Get all messages for a ticket"""
-        query = "SELECT * FROM messages WHERE ticket_id = ? ORDER BY timestamp"
-        messages = self._execute_query(query, (ticket_id,), fetch_all=True)
-        return messages or []
+        query += " WHERE id = ?"
+        params.append(ticket_id)
 
-    def get_executions(self, ticket_id: str) -> List[Dict]:
-        """Get all agent executions for a ticket"""
-        query = "SELECT * FROM agent_executions WHERE ticket_id = ? ORDER BY sequence_order"
-        executions = self._execute_query(query, (ticket_id,), fetch_all=True)
-        return executions or []
+        self._execute_query(query, tuple(params))

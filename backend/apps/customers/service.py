@@ -72,7 +72,7 @@ class CustomerService:
             ConversationSummary(
                 id=str(c['id']),
                 channel=c.get('channel', 'chat'),
-                message_count=2,
+                message_count=c.get('message_count', 0),
                 started_at=c['started_at']
             )
             for c in conversations_data
@@ -84,8 +84,8 @@ class CustomerService:
             email=customer_data['email'],
             tier=CustomerTier(customer_data.get('tier', 'standard')),
             sentiment=Sentiment(customer_data.get('sentiment', 'neutral')),
-            total_tickets=stats['total_tickets'],
-            resolved_tickets=stats['resolved_tickets'],
+            total_tickets=stats.get('total_tickets', 0),
+            resolved_tickets=stats.get('resolved_conversations', 0),
             avg_response_time=customer_data.get('avg_response_time', 0.0),
             interaction_frequency=customer_data.get('interaction_frequency'),
             last_interaction=customer_data.get('last_interaction'),
@@ -95,8 +95,8 @@ class CustomerService:
             tags=customer_data.get('tags', '').split(',') if customer_data.get('tags') else [],
             tickets=tickets,
             conversations=conversations,
-            open_tickets=stats['open_tickets'],
-            escalated_tickets=stats['escalated_tickets']
+            open_tickets=stats.get('open_tickets', 0),
+            escalated_tickets=0
         )
 
     def get_customer_tickets(self, customer_id: str) -> List[TicketSummary]:
@@ -122,7 +122,7 @@ class CustomerService:
             ConversationSummary(
                 id=str(c['id']),
                 channel=c.get('channel', 'chat'),
-                message_count=2,
+                message_count=c.get('message_count', 0),
                 started_at=c['started_at']
             )
             for c in conversations_data

@@ -1,23 +1,17 @@
-"""
-Ticket Service
-Business logic for ticket operations
-"""
-from typing import List, Optional
+from typing import Optional
 from .repository import TicketRepository
 from .schemas import (
     TicketResponse,
     TicketDetailResponse,
     TicketListResponse,
     TicketCustomer,
-    MessageResponse,
-    ExecutionStepResponse
 )
 from core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
 class TicketService:
-    """Service layer for ticket business logic"""
 
     def __init__(self):
         self.repository = TicketRepository()
@@ -31,20 +25,7 @@ class TicketService:
         page: int = 1,
         limit: int = 50
     ) -> TicketListResponse:
-        """
-        List tickets with filters and pagination
 
-        Args:
-            status: Filter by status
-            priority: Filter by priority
-            channel: Filter by channel
-            search: Search in subject
-            page: Page number (1-indexed)
-            limit: Items per page
-
-        Returns:
-            TicketListResponse with tickets and pagination metadata
-        """
         offset = (page - 1) * limit
 
         tickets_data, total = self.repository.list_tickets(
@@ -56,8 +37,7 @@ class TicketService:
             offset=offset
         )
 
-        # Transform to response DTOs
-        tickets = [self._ticket_to_response(t) for t in tickets_data]
+        tickets = [self._to_response(t) for t in tickets_data]
 
         return TicketListResponse(
             tickets=tickets,
@@ -68,100 +48,45 @@ class TicketService:
         )
 
     def get_ticket_detail(self, ticket_id: str) -> TicketDetailResponse:
-        """
-        Get detailed ticket information
-
-        Args:
-            ticket_id: Ticket ID
-
-        Returns:
-            TicketDetailResponse with full conversation and execution trace
-        """
-        # Get basic ticket data
         ticket_data = self.repository.get_ticket(ticket_id)
 
-        # Get messages
-        messages_data = self.repository.get_messages(ticket_id)
-        messages = [
-            MessageResponse(
-                id=m['id'],
-                role=m['role'],
-                content=m['content'],
-                timestamp=m['timestamp'],
-                agent_type=m.get('agent_type')
-            )
-            for m in messages_data
-        ]
-
-        # Get agent executions
-        executions_data = self.repository.get_executions(ticket_id)
-        executions = [
-            ExecutionStepResponse(
-                id=e['id'],
-                agent_name=e['agent_name'],
-                status=e['status'],
-                latency=e.get('latency'),
-                input_data=e.get('input_data'),
-                output_data=e.get('output_data'),
-                error=e.get('error')
-            )
-            for e in executions_data
-        ]
-
-        # Calculate totals
-        total_latency = sum(e.get('latency', 0) or 0 for e in executions_data)
-        total_cost = sum(e.get('cost', 0) or 0 for e in executions_data)
-
-        # Build response
         return TicketDetailResponse(
             id=ticket_data['id'],
             subject=ticket_data['subject'],
+            conversation_id=ticket_data['conversation_id'],
             customer=TicketCustomer(
-                id=ticket_data['customer_id'],
-                email=ticket_data.get('customer_id', 'unknown')
+                id=ticket_data['contact_id'],
+                email=ticket_data.get('customer_email', 'unknown'),
+                name=ticket_data.get('customer_name')
             ),
             priority=ticket_data['priority'],
             status=ticket_data['status'],
-            channel=ticket_data['channel'],
-            sentiment=ticket_data.get('sentiment'),
-            intent=ticket_data.get('intent'),
             created_at=ticket_data['created_at'],
             updated_at=ticket_data['updated_at'],
-            current_agent=ticket_data.get('current_agent'),
-            time_elapsed=ticket_data.get('time_elapsed', 0),
-            messages=messages,
-            executions=executions,
-            total_latency=total_latency,
-            total_cost=total_cost
+            assignee=ticket_data.get('assignee'),
+            escalation_reason=ticket_data.get('escalation_reason'),
+            resolved_at=ticket_data.get('resolved_at'),
+            conversation_channel=ticket_data.get('conversation_channel'),
+            message_count=ticket_data.get('message_count', 0)
         )
 
     def update_ticket_status(self, ticket_id: str, status: str) -> None:
-        """
-        Update ticket status
-
-        Args:
-            ticket_id: Ticket ID
-            status: New status
-        """
         self.repository.update_status(ticket_id, status)
-        logger.info(f"Ticket {ticket_id} status updated to {status}")
 
-    def _ticket_to_response(self, ticket_data: dict) -> TicketResponse:
-        """Transform DB dict to TicketResponse DTO"""
+    def _to_response(self, data: dict) -> TicketResponse:
         return TicketResponse(
-            id=ticket_data['id'],
-            subject=ticket_data['subject'],
+            id=data['id'],
+            subject=data['subject'],
+            conversation_id=data['conversation_id'],
             customer=TicketCustomer(
-                id=ticket_data['customer_id'],
-                email=ticket_data.get('customer_id', 'unknown')
+                id=data['contact_id'],
+                email=data.get('customer_email', 'unknown'),
+                name=data.get('customer_name')
             ),
-            priority=ticket_data['priority'],
-            status=ticket_data['status'],
-            channel=ticket_data['channel'],
-            sentiment=ticket_data.get('sentiment'),
-            intent=ticket_data.get('intent'),
-            created_at=ticket_data['created_at'],
-            updated_at=ticket_data['updated_at'],
-            current_agent=ticket_data.get('current_agent'),
-            time_elapsed=ticket_data.get('time_elapsed', 0)
+            priority=data['priority'],
+            status=data['status'],
+            created_at=data['created_at'],
+            updated_at=data['updated_at'],
+            assignee=data.get('assignee'),
+            escalation_reason=data.get('escalation_reason')
         )

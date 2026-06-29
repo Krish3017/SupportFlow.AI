@@ -8,6 +8,25 @@ export interface ChatResponse {
   content: string;
   done?: boolean;
   session_id?: string;
+  conversation_id?: string;
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+export interface ConversationHistory {
+  conversation_id: string;
+  status: string;
+  messages: ConversationMessage[];
+}
+
+export interface SessionInfo {
+  conversation_id: string | null;
+  status: string | null;
 }
 
 /**
@@ -23,7 +42,7 @@ export async function sendChatMessage(
   sessionId: string,
   customerId: string,
   onChunk: (content: string) => void
-): Promise<string | null> {
+): Promise<{ session_id: string | null; conversation_id: string | null }> {
   const response = await fetch(`${API_BASE_URL}/api/chat`, {
     method: 'POST',
     headers: {
@@ -48,6 +67,7 @@ export async function sendChatMessage(
   const decoder = new TextDecoder();
   let buffer = '';
   let returnedSessionId: string | null = null;
+  let returnedConversationId: string | null = null;
 
   try {
     while (true) {
@@ -55,26 +75,26 @@ export async function sendChatMessage(
 
       if (done) break;
 
-      // Decode the chunk and add to buffer
       buffer += decoder.decode(value, { stream: true });
 
-      // Process complete SSE messages
       const lines = buffer.split('\n\n');
-      buffer = lines.pop() || ''; // Keep incomplete message in buffer
+      buffer = lines.pop() || '';
 
       for (const line of lines) {
         if (line.startsWith('data: ')) {
-          const data = line.slice(6); // Remove 'data: ' prefix
+          const data = line.slice(6);
 
           try {
             const parsed: ChatResponse = JSON.parse(data);
 
             if (parsed.done) {
-              // Capture session_id from done signal
               if (parsed.session_id) {
                 returnedSessionId = parsed.session_id;
               }
-              return returnedSessionId; // Stream completed
+              if (parsed.conversation_id) {
+                returnedConversationId = parsed.conversation_id;
+              }
+              return { session_id: returnedSessionId, conversation_id: returnedConversationId };
             }
 
             if (parsed.content) {
@@ -90,7 +110,7 @@ export async function sendChatMessage(
     reader.releaseLock();
   }
 
-  return returnedSessionId;
+  return { session_id: returnedSessionId, conversation_id: returnedConversationId };
 }
 
 /**
@@ -102,5 +122,25 @@ export async function checkHealth(): Promise<boolean> {
     return response.ok;
   } catch {
     return false;
+  }
+}
+
+export async function fetchConversationHistory(conversationId: string): Promise<ConversationHistory | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat/history/${conversationId}`);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchSessionConversation(sessionId: string): Promise<SessionInfo> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat/session/${sessionId}`);
+    if (!response.ok) return { conversation_id: null, status: null };
+    return await response.json();
+  } catch {
+    return { conversation_id: null, status: null };
   }
 }

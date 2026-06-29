@@ -1,6 +1,5 @@
 import logging
 import os
-from collections import defaultdict
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,7 +15,19 @@ from telegram.ext import (
 )
 
 from routers.chat import workflow
-from shared.persistence import persist_workflow_result, emit_activity
+from shared.persistence import (
+    ensure_contact,
+    get_or_create_conversation,
+    store_user_message,
+    create_execution,
+    complete_execution,
+    record_execution_steps,
+    store_assistant_message,
+    create_ticket_on_escalation,
+    update_contact_stats,
+    emit_activity,
+    get_conversation_messages,
+)
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TELEGRAM_BOT_TOKEN:
@@ -24,9 +35,6 @@ if not TELEGRAM_BOT_TOKEN:
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Temporary session storage (same idea as chat.py)
-telegram_sessions = defaultdict(list)
 
 # Conversation states for /feedback
 WAITING_FOR_FEEDBACK = 1
@@ -41,55 +49,55 @@ async def process_through_workflow(
     user_id: str,
     session_id: str
 ) -> str:
-    """
-    Send message through existing LangGraph workflow.
-    Returns AI response.
-    """
-    try:
-        telegram_sessions[session_id].append({
-            "role": "user",
-            "content": message,
-        })
+    import time
 
-        logger.info(f"🔄 Workflow invoked for {session_id}: {message[:50]}...")
+    try:
+        start_time = time.time()
+
+        contact_id = ensure_contact(user_id, "telegram")
+        conversation_id = get_or_create_conversation(contact_id, "telegram", session_id)
+        chat_history = get_conversation_messages(conversation_id)
+
+        user_msg_id = store_user_message(conversation_id, message)
+        execution_id = create_execution(user_msg_id, conversation_id)
+
+        chat_history.append({"role": "user", "content": message})
 
         result = await workflow.ainvoke({
             "customer_message": message,
-            "customer_id": user_id,
+            "customer_id": contact_id,
             "session_id": session_id,
-            "chat_history": telegram_sessions[session_id],
+            "chat_history": chat_history,
         })
 
-        logger.info(f"📦 Result keys: {result.keys() if result else 'None'}")
+        duration = time.time() - start_time
+        record_execution_steps(execution_id, result, message, duration)
+        complete_execution(execution_id, result, duration)
 
         response = result.get(
             "final_response",
             "Sorry, I couldn't process your request.",
         )
 
-        telegram_sessions[session_id].append({
-            "role": "assistant",
-            "content": response,
-        })
+        store_assistant_message(conversation_id, response, execution_id)
+        create_ticket_on_escalation(conversation_id, contact_id, result)
+        update_contact_stats(contact_id, result)
 
-        # Persist to admin panel
-        try:
-            persist_workflow_result(
-                customer_id=user_id,
-                session_id=session_id,
-                channel="telegram",
-                message=message,
-                result=result,
-            )
-        except Exception as pe:
-            logger.warning(f"Persistence error (non-blocking): {pe}")
-
-        logger.info(f"✅ Response generated: {response[:100]}...")
+        emit_activity(
+            "conversation",
+            f"[TELEGRAM] {result.get('intent', 'unknown')} from {contact_id}",
+            metadata={
+                "conversation_id": conversation_id,
+                "execution_id": execution_id,
+                "channel": "telegram",
+                "intent": result.get("intent"),
+            }
+        )
 
         return response
 
     except Exception as e:
-        logger.exception(f"❌ Workflow error: {str(e)}")
+        logger.exception(f"Workflow error: {str(e)}")
         return "Sorry, an internal error occurred. Please try again."
 
 
@@ -412,17 +420,24 @@ async def feedback_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /clear - Clear conversation history"""
+    """Handle /clear - Close current conversation so next message starts fresh"""
     try:
         user = update.effective_user
         user_id = str(user.id)
         session_id = f"telegram_{user_id}"
 
-        # Clear session
-        if session_id in telegram_sessions:
-            del telegram_sessions[session_id]
+        from shared.persistence import close_conversation, _get_db
+        conn = _get_db()
+        existing = conn.execute("""
+            SELECT id FROM conversations
+            WHERE session_token = ? AND status NOT IN ('closed', 'archived')
+        """, (session_id,)).fetchone()
+        conn.close()
 
-        logger.info(f"🗑️ Cleared session for {user_id}")
+        if existing:
+            close_conversation(existing['id'])
+
+        logger.info(f"Cleared session for {user_id}")
 
         await update.message.reply_text(
             """✅ **Conversation cleared successfully.**

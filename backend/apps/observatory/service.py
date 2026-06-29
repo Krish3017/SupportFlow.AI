@@ -15,6 +15,7 @@ from core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
 class ObservatoryService:
 
     def __init__(self):
@@ -114,13 +115,16 @@ class ObservatoryService:
         executions = [
             ExecutionResponse(
                 id=e['id'],
-                ticket_id=e['ticket_id'],
-                session_id=e.get('session_id'),
+                conversation_id=e['conversation_id'],
+                message_id=e.get('message_id'),
                 started_at=e['started_at'],
                 completed_at=e.get('completed_at'),
                 total_duration=round(e.get('total_duration') or 0, 3),
-                status=ExecutionStatusEnum(e['status']),
-                step_count=e['step_count']
+                status=self._safe_status(e['status']),
+                step_count=e.get('step_count', 0),
+                intent=e.get('intent'),
+                confidence=e.get('confidence'),
+                escalated=bool(e.get('escalated', 0))
             )
             for e in executions_data
         ]
@@ -143,7 +147,7 @@ class ObservatoryService:
                 started_at=s['started_at'],
                 completed_at=s.get('completed_at'),
                 duration=round(s.get('latency') or 0, 3),
-                status=ExecutionStatusEnum(s['status']),
+                status=self._safe_status(s['status']),
                 input_summary=self._safe_summary(s.get('input_data')),
                 output_summary=self._safe_summary(s.get('output_data')),
                 error=s.get('error'),
@@ -153,23 +157,19 @@ class ObservatoryService:
         ]
 
         total_duration = sum(s.duration for s in steps)
-        overall_status = ExecutionStatusEnum.SUCCESS
-        if any(s.status == ExecutionStatusEnum.FAILED for s in steps):
-            overall_status = ExecutionStatusEnum.FAILED
-        elif any(s.status == ExecutionStatusEnum.RUNNING for s in steps):
-            overall_status = ExecutionStatusEnum.RUNNING
-
-        started_at = steps[0].started_at if steps else None
-        completed_at = steps[-1].completed_at if steps else None
+        overall_status = self._safe_status(data.get('status', 'completed'))
 
         return ExecutionDetailResponse(
             id=data['id'],
-            ticket_id=data['ticket_id'],
-            started_at=started_at,
-            completed_at=completed_at,
+            conversation_id=data['conversation_id'],
+            message_id=data.get('message_id'),
+            started_at=data.get('started_at'),
+            completed_at=data.get('completed_at'),
             total_duration=round(total_duration, 3),
             status=overall_status,
             step_count=len(steps),
+            intent=data.get('intent'),
+            confidence=data.get('confidence'),
             steps=steps
         )
 
@@ -182,7 +182,7 @@ class ObservatoryService:
                 started_at=s['started_at'],
                 completed_at=s.get('completed_at'),
                 duration=round(s.get('duration') or 0, 3),
-                status=ExecutionStatusEnum(s['status']),
+                status=self._safe_status(s['status']),
                 input_summary=self._safe_summary(s.get('input_summary')),
                 output_summary=self._safe_summary(s.get('output_summary')),
                 error=s.get('error'),
@@ -194,7 +194,6 @@ class ObservatoryService:
     def _compute_status(self, total: int, failed: int) -> AgentStatusEnum:
         if total == 0:
             return AgentStatusEnum.HEALTHY
-
         failure_rate = failed / total
         if failure_rate > 0.3:
             return AgentStatusEnum.OFFLINE
@@ -216,3 +215,9 @@ class ObservatoryService:
         if len(data) > 200:
             return data[:200] + "..."
         return data
+
+    def _safe_status(self, status: str) -> ExecutionStatusEnum:
+        try:
+            return ExecutionStatusEnum(status)
+        except ValueError:
+            return ExecutionStatusEnum.COMPLETED

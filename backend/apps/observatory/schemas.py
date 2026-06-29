@@ -1,17 +1,21 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+
 
 class AgentStatusEnum(str, Enum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     OFFLINE = "offline"
 
+
 class ExecutionStatusEnum(str, Enum):
     SUCCESS = "success"
+    COMPLETED = "completed"
     FAILED = "failed"
     RUNNING = "running"
+
 
 class AgentHealthResponse(BaseModel):
     id: str
@@ -24,12 +28,14 @@ class AgentHealthResponse(BaseModel):
     last_execution: Optional[datetime] = None
     error_count: int
 
+
 class AgentDetailResponse(AgentHealthResponse):
     recent_errors: List[str] = []
     latency_p50: float = 0.0
     latency_p95: float = 0.0
     latency_p99: float = 0.0
     success_rate: float = 0.0
+
 
 class ExecutionStepResponse(BaseModel):
     agent_name: str
@@ -42,21 +48,24 @@ class ExecutionStepResponse(BaseModel):
     error: Optional[str] = None
     sequence_order: int
 
+
 class ExecutionResponse(BaseModel):
     id: str
-    ticket_id: str
-    customer_id: Optional[str] = None
-    session_id: Optional[str] = None
+    conversation_id: str
+    message_id: Optional[str] = None
     started_at: datetime
     completed_at: Optional[datetime] = None
     total_duration: float = 0.0
     status: ExecutionStatusEnum
     step_count: int
     intent: Optional[str] = None
-    priority: Optional[str] = None
+    confidence: Optional[float] = None
+    escalated: Optional[bool] = False
+
 
 class ExecutionDetailResponse(ExecutionResponse):
     steps: List[ExecutionStepResponse] = []
+
 
 class ExecutionListResponse(BaseModel):
     executions: List[ExecutionResponse]
@@ -64,6 +73,7 @@ class ExecutionListResponse(BaseModel):
     page: int
     limit: int
     pages: int
+
 
 class AgentListResponse(BaseModel):
     agents: List[AgentHealthResponse]

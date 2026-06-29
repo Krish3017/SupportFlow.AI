@@ -6,13 +6,14 @@ from core.logging_config import get_logger
 logger = get_logger(__name__)
 
 AGENT_NAMES = {
-    "intent": "Intent Agent",
-    "customer_intelligence": "Customer Intelligence Agent",
-    "priority": "Priority Agent",
-    "knowledge": "Knowledge Agent",
-    "resolution": "Resolution Agent",
-    "escalation": "Escalation Agent",
+    "intent_agent": "Intent Agent",
+    "customer_intelligence_agent": "Customer Intelligence Agent",
+    "priority_agent": "Priority Agent",
+    "knowledge_agent": "Knowledge Agent",
+    "resolution_agent": "Resolution Agent",
+    "escalation_agent": "Escalation Agent",
 }
+
 
 class ObservatoryRepository(BaseRepository):
 
@@ -26,7 +27,7 @@ class ObservatoryRepository(BaseRepository):
                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_executions,
                 AVG(latency) as avg_latency,
                 MAX(started_at) as last_execution
-            FROM agent_executions
+            FROM execution_steps
             GROUP BY agent_id
             ORDER BY agent_id
         """
@@ -43,7 +44,7 @@ class ObservatoryRepository(BaseRepository):
                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_executions,
                 AVG(latency) as avg_latency,
                 MAX(started_at) as last_execution
-            FROM agent_executions
+            FROM execution_steps
             WHERE agent_id = ?
             GROUP BY agent_id
         """
@@ -52,18 +53,16 @@ class ObservatoryRepository(BaseRepository):
         if not stats:
             raise NotFoundError(resource="Agent", identifier=agent_name)
 
-        # Get recent errors
         errors_query = """
-            SELECT error FROM agent_executions
+            SELECT error FROM execution_steps
             WHERE agent_id = ? AND status = 'failed' AND error IS NOT NULL
             ORDER BY started_at DESC
             LIMIT 5
         """
         errors = self._execute_query(errors_query, (agent_name,), fetch_all=True)
 
-        # Get latency percentiles
         latency_query = """
-            SELECT latency FROM agent_executions
+            SELECT latency FROM execution_steps
             WHERE agent_id = ? AND latency IS NOT NULL
             ORDER BY latency
         """
@@ -85,62 +84,47 @@ class ObservatoryRepository(BaseRepository):
         offset: int = 0
     ) -> Tuple[List[Dict], int]:
 
-        # Get distinct executions grouped by ticket_id and session
         query = """
             SELECT
-                MIN(id) as id,
-                ticket_id,
-                session_id,
-                MIN(started_at) as started_at,
-                MAX(completed_at) as completed_at,
-                SUM(latency) as total_duration,
-                COUNT(*) as step_count,
-                CASE
-                    WHEN SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) > 0 THEN 'failed'
-                    WHEN SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) > 0 THEN 'running'
-                    ELSE 'success'
-                END as status
-            FROM agent_executions
+                e.id,
+                e.conversation_id,
+                e.message_id,
+                e.status,
+                e.started_at,
+                e.completed_at,
+                e.total_duration,
+                e.confidence,
+                e.intent,
+                e.escalated,
+                (SELECT COUNT(*) FROM execution_steps s WHERE s.execution_id = e.id) as step_count
+            FROM executions e
             WHERE 1=1
         """
         params = []
 
-        if agent_id:
-            query += " AND agent_id = ?"
-            params.append(agent_id)
-
         if status:
-            query += " AND status = ?"
+            query += " AND e.status = ?"
             params.append(status)
 
+        if agent_id:
+            query += " AND EXISTS (SELECT 1 FROM execution_steps s WHERE s.execution_id = e.id AND s.agent_id = ?)"
+            params.append(agent_id)
+
         if ticket_id:
-            query += " AND ticket_id = ?"
+            query += " AND EXISTS (SELECT 1 FROM tickets t WHERE t.conversation_id = e.conversation_id AND t.id = ?)"
             params.append(ticket_id)
 
-        query += " GROUP BY ticket_id ORDER BY started_at DESC LIMIT ? OFFSET ?"
+        query += " ORDER BY e.started_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         executions = self._execute_query(query, tuple(params), fetch_all=True)
 
-        # Count
-        count_query = """
-            SELECT COUNT(DISTINCT ticket_id) as count
-            FROM agent_executions
-            WHERE 1=1
-        """
+        count_query = "SELECT COUNT(*) as count FROM executions WHERE 1=1"
         count_params = []
-
-        if agent_id:
-            count_query += " AND agent_id = ?"
-            count_params.append(agent_id)
 
         if status:
             count_query += " AND status = ?"
             count_params.append(status)
-
-        if ticket_id:
-            count_query += " AND ticket_id = ?"
-            count_params.append(ticket_id)
 
         count_result = self._execute_query(count_query, tuple(count_params), fetch_one=True)
         total = count_result['count'] if count_result else 0
@@ -148,31 +132,28 @@ class ObservatoryRepository(BaseRepository):
         return executions or [], total
 
     def get_execution_detail(self, execution_id: str) -> Dict:
-        # First find the ticket_id for this execution
-        exec_query = "SELECT ticket_id FROM agent_executions WHERE id = ?"
+        exec_query = """
+            SELECT id, message_id, conversation_id, status, started_at, completed_at, total_duration, confidence, intent
+            FROM executions WHERE id = ?
+        """
         exec_row = self._execute_query(exec_query, (execution_id,), fetch_one=True)
 
         if not exec_row:
             raise NotFoundError(resource="Execution", identifier=execution_id)
 
-        ticket_id = exec_row['ticket_id']
-
-        # Get all steps for this ticket's execution
         steps_query = """
-            SELECT * FROM agent_executions
-            WHERE ticket_id = ?
+            SELECT * FROM execution_steps
+            WHERE execution_id = ?
             ORDER BY sequence_order
         """
-        steps = self._execute_query(steps_query, (ticket_id,), fetch_all=True)
+        steps = self._execute_query(steps_query, (execution_id,), fetch_all=True)
 
-        return {
-            'id': execution_id,
-            'ticket_id': ticket_id,
-            'steps': steps or []
-        }
+        result = dict(exec_row)
+        result['steps'] = steps or []
+        return result
 
     def get_execution_timeline(self, execution_id: str) -> List[Dict]:
-        exec_query = "SELECT ticket_id FROM agent_executions WHERE id = ?"
+        exec_query = "SELECT id FROM executions WHERE id = ?"
         exec_row = self._execute_query(exec_query, (execution_id,), fetch_one=True)
 
         if not exec_row:
@@ -190,9 +171,9 @@ class ObservatoryRepository(BaseRepository):
                 output_data as output_summary,
                 error,
                 sequence_order
-            FROM agent_executions
-            WHERE ticket_id = ?
+            FROM execution_steps
+            WHERE execution_id = ?
             ORDER BY sequence_order
         """
-        steps = self._execute_query(steps_query, (exec_row['ticket_id'],), fetch_all=True)
+        steps = self._execute_query(steps_query, (execution_id,), fetch_all=True)
         return steps or []

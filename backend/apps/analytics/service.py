@@ -10,17 +10,19 @@ from core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+
 class AnalyticsService:
 
     def __init__(self):
         self.repository = AnalyticsRepository()
 
     def get_overview(self) -> OverviewResponse:
+        conversation_stats = self.repository.get_conversation_overview()
         ticket_stats = self.repository.get_ticket_stats()
         customer_stats = self.repository.get_customer_stats()
         agent_stats = self.repository.get_agent_stats()
         knowledge_stats = self.repository.get_knowledge_stats()
-        conversation_stats = self.repository.get_conversation_stats()
+        execution_stats = self.repository.get_execution_stats()
 
         total_exec = agent_stats['total_executions'] or 0
         failed_exec = agent_stats['failed'] or 0
@@ -31,11 +33,10 @@ class AnalyticsService:
                 "total": ticket_stats['total'],
                 "open": ticket_stats['open'],
                 "resolved": ticket_stats['resolved'],
-                "escalated": ticket_stats['escalated'],
             },
             customers={
                 "total": customer_stats['total'],
-                "new": customer_stats['new_customers'],
+                "new": customer_stats['standard_customers'],
             },
             agents={
                 "total_executions": total_exec,
@@ -50,7 +51,7 @@ class AnalyticsService:
             },
             conversations={
                 "total": conversation_stats['total'],
-                "completed": conversation_stats['completed'],
+                "resolved": conversation_stats['resolved'],
                 "escalated": conversation_stats['escalated'],
             }
         )
@@ -58,14 +59,14 @@ class AnalyticsService:
     def get_ticket_analytics(self) -> TicketAnalyticsResponse:
         stats = self.repository.get_ticket_stats()
         by_priority = [dict(r) for r in self.repository.get_tickets_by_priority()]
-        by_channel = [dict(r) for r in self.repository.get_tickets_by_channel()]
-        trend = [dict(r) for r in self.repository.get_ticket_trend()]
+        by_channel = [dict(r) for r in self.repository.get_conversations_by_channel()]
+        trend = [dict(r) for r in self.repository.get_conversation_trend()]
 
         return TicketAnalyticsResponse(
             total=stats['total'],
             open=stats['open'],
             resolved=stats['resolved'],
-            escalated=stats['escalated'],
+            escalated=0,
             avg_resolution_time=0.0,
             by_priority=by_priority,
             by_channel=by_channel,
@@ -80,7 +81,7 @@ class AnalyticsService:
         return CustomerAnalyticsResponse(
             total=stats['total'],
             active=stats['total'],
-            new=stats['new_customers'],
+            new=stats['standard_customers'],
             by_tier=by_tier,
             by_sentiment=by_sentiment
         )

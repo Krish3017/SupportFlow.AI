@@ -1,8 +1,3 @@
-"""
-Data Persistence Layer
-Instruments the request lifecycle to persist all operational data.
-Used by Chat, Telegram, and Email channels.
-"""
 import time
 import json
 import sqlite3
@@ -22,282 +17,360 @@ AGENT_NAMES = {
     "escalation_agent": "Escalation Agent",
 }
 
-# Track session→ticket mapping to avoid creating duplicates
-_session_ticket_map: dict = {}
-
-
-_schema_migrated = False
 
 def _get_db():
-    """Get database connection using same path as rest of app."""
-    global _schema_migrated
     import os
     db_path = os.getenv("DATABASE_PATH", "supportflow.db")
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-
-    if not _schema_migrated:
-        _ensure_schema(conn)
-        _schema_migrated = True
-
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
-def _ensure_schema(conn):
-    """Ensure all required columns exist. Safe to run multiple times."""
-    # Add missing columns to customers table
-    _add_column_if_missing(conn, "customers", "last_interaction", "TEXT")
-    _add_column_if_missing(conn, "customers", "sentiment", "TEXT DEFAULT 'neutral'")
-    _add_column_if_missing(conn, "customers", "total_tickets", "INTEGER DEFAULT 0")
-    _add_column_if_missing(conn, "customers", "resolved_tickets", "INTEGER DEFAULT 0")
-    _add_column_if_missing(conn, "customers", "avg_response_time", "REAL DEFAULT 0.0")
-    _add_column_if_missing(conn, "customers", "interaction_frequency", "TEXT")
-    _add_column_if_missing(conn, "customers", "joined_date", "TEXT")
-    _add_column_if_missing(conn, "customers", "risk_score", "INTEGER DEFAULT 0")
-    _add_column_if_missing(conn, "customers", "lifetime_value", "REAL DEFAULT 0.0")
-    _add_column_if_missing(conn, "customers", "tags", "TEXT")
-    _add_column_if_missing(conn, "customers", "tier", "TEXT DEFAULT 'standard'")
-    _add_column_if_missing(conn, "customers", "name", "TEXT")
-    conn.commit()
 
-def _add_column_if_missing(conn, table: str, column: str, col_type: str):
-    """Add column to table if it doesn't exist."""
-    try:
-        cols = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
-        if column not in cols:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
-            logger.info(f"✓ Added column {table}.{column}")
-    except Exception:
-        pass
+def _gen_id(prefix: str) -> str:
+    return f"{prefix}_{uuid4().hex[:12]}"
 
 
-def ensure_customer(customer_id: str, channel: str, name: Optional[str] = None) -> str:
-    """Find or create customer. Returns stable customer_id."""
-    # For anonymous users, derive stable ID from channel
-    if not customer_id or customer_id == "anonymous":
-        customer_id = f"anon_{channel}"
+def ensure_contact(contact_id: str, channel: str, name: Optional[str] = None) -> str:
+    if not contact_id or contact_id == "anonymous":
+        contact_id = f"anon_{channel}_{uuid4().hex[:6]}"
 
-    # Derive email from customer_id
-    if "@" in customer_id:
-        email = customer_id
+    if "@" in contact_id:
+        email = contact_id
     else:
-        email = f"{customer_id}@{channel}.supportflow"
+        email = f"{contact_id}@{channel}.supportflow"
 
     conn = _get_db()
     try:
-        # Check if customer exists by ID first
-        existing = conn.execute("SELECT id FROM customers WHERE id = ?", (customer_id,)).fetchone()
+        existing = conn.execute("SELECT id FROM customers WHERE id = ?", (contact_id,)).fetchone()
 
         if existing:
-            # Update last interaction
             conn.execute(
                 "UPDATE customers SET last_interaction = ? WHERE id = ?",
-                (datetime.now().isoformat(), customer_id)
+                (datetime.utcnow().isoformat(), contact_id)
             )
         else:
-            # Check by email
             existing_email = conn.execute("SELECT id FROM customers WHERE email = ?", (email,)).fetchone()
             if existing_email:
-                customer_id = existing_email['id']
+                contact_id = existing_email['id']
                 conn.execute(
                     "UPDATE customers SET last_interaction = ? WHERE id = ?",
-                    (datetime.now().isoformat(), customer_id)
+                    (datetime.utcnow().isoformat(), contact_id)
                 )
             else:
-                # Create new customer
+                now = datetime.utcnow().isoformat()
                 conn.execute("""
-                    INSERT INTO customers (id, name, email, tier, sentiment, joined_date, last_interaction, total_tickets, resolved_tickets)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
-                """, (
-                    customer_id,
-                    name or customer_id,
-                    email,
-                    'standard',
-                    'neutral',
-                    datetime.now().isoformat(),
-                    datetime.now().isoformat(),
-                ))
+                    INSERT INTO customers (id, name, email, tier, sentiment, joined_date, last_interaction, total_conversations, resolved_conversations)
+                    VALUES (?, ?, ?, 'standard', 'neutral', ?, ?, 0, 0)
+                """, (contact_id, name or contact_id, email, now, now))
+
+        channel_id = f"{channel}:{contact_id}"
+        conn.execute("""
+            INSERT OR IGNORE INTO contact_channels (contact_id, channel_type, channel_identifier, verified, created_at)
+            VALUES (?, ?, ?, 0, ?)
+        """, (contact_id, channel, channel_id, datetime.utcnow().isoformat()))
 
         conn.commit()
-        logger.info(f"✓ Customer ensured: {customer_id}")
     except Exception as e:
-        logger.error(f"✗ Customer persist failed: {e}")
+        logger.error(f"Contact persist failed: {e}")
         conn.rollback()
     finally:
         conn.close()
 
-    return customer_id
+    return contact_id
 
 
-def get_or_create_ticket(customer_id: str, channel: str, session_id: str, subject: str = "New conversation") -> str:
-    """Get existing ticket for session or create new one."""
-    # Check in-memory cache first
-    if session_id in _session_ticket_map:
-        return _session_ticket_map[session_id]
-
-    ticket_id = f"TKT-{uuid4().hex[:8]}"
-    now = datetime.now().isoformat()
-
+def get_or_create_conversation(contact_id: str, channel: str, session_token: str) -> str:
     conn = _get_db()
     try:
+        existing = conn.execute("""
+            SELECT id FROM conversations
+            WHERE session_token = ? AND status NOT IN ('closed', 'archived')
+            ORDER BY updated_at DESC LIMIT 1
+        """, (session_token,)).fetchone()
+
+        if existing:
+            conn.close()
+            return existing['id']
+
+        conv_id = _gen_id("conv")
+        now = datetime.utcnow().isoformat()
         conn.execute("""
-            INSERT INTO tickets (id, subject, customer_id, priority, status, channel, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (ticket_id, subject[:100], customer_id, 'medium', 'new', channel, now, now))
+            INSERT INTO conversations (id, contact_id, channel, status, started_at, updated_at, session_token)
+            VALUES (?, ?, ?, 'active', ?, ?, ?)
+        """, (conv_id, contact_id, channel, now, now, session_token))
         conn.commit()
-        _session_ticket_map[session_id] = ticket_id
-        logger.info(f"✓ Ticket created: {ticket_id}")
+        return conv_id
     except Exception as e:
-        logger.error(f"✗ Ticket creation failed: {e}")
+        logger.error(f"Conversation creation failed: {e}")
         conn.rollback()
+        raise
     finally:
         conn.close()
 
-    return ticket_id
 
-
-def store_message(ticket_id: str, role: str, content: str, agent_type: Optional[str] = None):
-    """Persist a message."""
+def store_user_message(conversation_id: str, content: str) -> str:
+    msg_id = _gen_id("msg")
     conn = _get_db()
     try:
+        now = datetime.utcnow().isoformat()
         conn.execute("""
-            INSERT INTO messages (ticket_id, role, content, timestamp, agent_type)
-            VALUES (?, ?, ?, ?, ?)
-        """, (ticket_id, role, content, datetime.now().isoformat(), agent_type))
+            INSERT INTO messages (id, conversation_id, role, content, timestamp)
+            VALUES (?, ?, 'user', ?, ?)
+        """, (msg_id, conversation_id, content, now))
+        conn.execute(
+            "UPDATE conversations SET updated_at = ? WHERE id = ?",
+            (now, conversation_id)
+        )
         conn.commit()
-        logger.info(f"✓ Message stored: {role} -> ticket {ticket_id}")
     except Exception as e:
-        logger.error(f"✗ Message store failed: {e}")
+        logger.error(f"User message store failed: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+    return msg_id
+
+
+def store_assistant_message(conversation_id: str, content: str, execution_id: str) -> str:
+    msg_id = _gen_id("msg")
+    conn = _get_db()
+    try:
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO messages (id, conversation_id, role, content, timestamp, execution_id)
+            VALUES (?, ?, 'assistant', ?, ?, ?)
+        """, (msg_id, conversation_id, content, now, execution_id))
+        conn.execute(
+            "UPDATE conversations SET updated_at = ? WHERE id = ?",
+            (now, conversation_id)
+        )
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Assistant message store failed: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+    return msg_id
+
+
+def create_execution(message_id: str, conversation_id: str) -> str:
+    exec_id = _gen_id("exec")
+    conn = _get_db()
+    try:
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO executions (id, message_id, conversation_id, status, started_at)
+            VALUES (?, ?, ?, 'running', ?)
+        """, (exec_id, message_id, conversation_id, now))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Execution creation failed: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+    return exec_id
+
+
+def complete_execution(execution_id: str, result: dict, duration: float):
+    conn = _get_db()
+    try:
+        now = datetime.utcnow().isoformat()
+        escalated = 1 if result.get("escalate") else 0
+        status = "completed"
+        if result.get("_error"):
+            status = "failed"
+
+        conn.execute("""
+            UPDATE executions SET
+                status = ?,
+                completed_at = ?,
+                total_duration = ?,
+                confidence = ?,
+                intent = ?,
+                sentiment = ?,
+                priority = ?,
+                escalated = ?
+            WHERE id = ?
+        """, (
+            status, now, round(duration, 3),
+            result.get("confidence"),
+            result.get("intent"),
+            result.get("sentiment"),
+            result.get("priority"),
+            escalated,
+            execution_id
+        ))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Execution complete failed: {e}")
         conn.rollback()
     finally:
         conn.close()
 
 
-def record_agent_steps(execution_id: str, ticket_id: str, session_id: str, result: dict, message: str, duration: float):
-    """Record all agent execution steps from workflow result."""
+def record_execution_steps(execution_id: str, result: dict, message: str, duration: float):
     conn = _get_db()
     try:
         agent_sequence = [
-            ("intent_agent", "Intent Agent", json.dumps({"intent": result.get("intent"), "sentiment": result.get("sentiment")})),
+            ("intent_agent", "Intent Agent", json.dumps({"intent": result.get("intent"), "sentiment": result.get("sentiment"), "confidence": result.get("confidence")})),
             ("customer_intelligence_agent", "Customer Intelligence Agent", json.dumps({"context": str(result.get("customer_context", ""))[:200]})),
             ("priority_agent", "Priority Agent", json.dumps({"priority": result.get("priority")})),
         ]
 
         if result.get("retrieved_context"):
-            agent_sequence.append(("knowledge_agent", "Knowledge Agent", result.get("retrieved_context", "")[:200]))
+            agent_sequence.append(("knowledge_agent", "Knowledge Agent", str(result.get("retrieved_context", ""))[:500]))
 
         agent_sequence.append(("resolution_agent", "Resolution Agent", (result.get("final_response", ""))[:200]))
         agent_sequence.append(("escalation_agent", "Escalation Agent", json.dumps({"escalate": result.get("escalate", False)})))
 
-        now = datetime.now().isoformat()
+        now = datetime.utcnow().isoformat()
         step_duration = duration / len(agent_sequence) if agent_sequence else 0
 
         for order, (agent_id, agent_name, output) in enumerate(agent_sequence, 1):
-            step_id = f"{execution_id}_{agent_id}"
+            step_id = f"{execution_id}_step{order}"
             conn.execute("""
-                INSERT OR IGNORE INTO agent_executions
-                (id, ticket_id, session_id, agent_id, agent_name, status, input_data, output_data, latency, cost, error, started_at, completed_at, sequence_order)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR IGNORE INTO execution_steps
+                (id, execution_id, agent_id, agent_name, sequence_order, status, input_data, output_data, latency, cost, started_at, completed_at)
+                VALUES (?, ?, ?, ?, ?, 'success', ?, ?, ?, 0.0, ?, ?)
             """, (
-                step_id, ticket_id, session_id, agent_id, agent_name,
-                'success', message[:200], output, round(step_duration, 3), 0.0, None,
-                now, now, order
+                step_id, execution_id, agent_id, agent_name, order,
+                message[:200], output, round(step_duration, 3), now, now
             ))
 
         conn.commit()
-        logger.info(f"✓ {len(agent_sequence)} agent steps recorded for {ticket_id}")
     except Exception as e:
-        logger.error(f"✗ Agent steps recording failed: {e}")
+        logger.error(f"Execution steps recording failed: {e}")
         conn.rollback()
     finally:
         conn.close()
 
 
-def update_ticket_from_result(ticket_id: str, result: dict):
-    """Update ticket with workflow results."""
+def create_ticket_on_escalation(conversation_id: str, contact_id: str, result: dict) -> Optional[str]:
+    if not result.get("escalate"):
+        return None
+
     conn = _get_db()
     try:
-        status = "resolved"
-        if result.get("escalate"):
-            status = "escalated"
+        existing = conn.execute(
+            "SELECT id FROM tickets WHERE conversation_id = ? AND status != 'resolved'",
+            (conversation_id,)
+        ).fetchone()
+
+        if existing:
+            conn.close()
+            return existing['id']
+
+        ticket_id = _gen_id("TKT")
+        now = datetime.utcnow().isoformat()
+        subject = (result.get("customer_message") or result.get("intent") or "Escalated conversation")[:100]
 
         conn.execute("""
-            UPDATE tickets SET
-                subject = COALESCE(?, subject),
-                intent = ?,
-                sub_intent = ?,
-                sentiment = ?,
-                confidence = ?,
-                priority = COALESCE(?, priority),
-                status = ?,
-                updated_at = ?
-            WHERE id = ?
+            INSERT INTO tickets (id, conversation_id, contact_id, subject, priority, status, created_at, updated_at, escalation_reason)
+            VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)
         """, (
-            (result.get("customer_message", ""))[:100] or None,
-            result.get("intent"),
-            result.get("sub_intent"),
-            result.get("sentiment"),
-            result.get("confidence"),
-            result.get("priority"),
-            status,
-            datetime.now().isoformat(),
-            ticket_id,
+            ticket_id, conversation_id, contact_id, subject,
+            result.get("priority", "medium"), now, now,
+            f"AI escalated: intent={result.get('intent')}, confidence={result.get('confidence')}"
         ))
+
+        conn.execute("""
+            UPDATE conversations SET status = 'escalated', updated_at = ? WHERE id = ?
+        """, (now, conversation_id))
+
         conn.commit()
-        logger.info(f"✓ Ticket updated: {ticket_id} -> {status}")
+        return ticket_id
     except Exception as e:
-        logger.error(f"✗ Ticket update failed: {e}")
+        logger.error(f"Ticket creation failed: {e}")
         conn.rollback()
+        return None
     finally:
         conn.close()
 
 
-def update_customer_stats(customer_id: str, result: dict):
-    """Update customer stats after workflow."""
+def update_contact_stats(contact_id: str, result: dict):
     conn = _get_db()
     try:
-        escalated = 1 if result.get("escalate") else 0
+        escalated = result.get("escalate", False)
         conn.execute("""
             UPDATE customers SET
                 sentiment = COALESCE(?, sentiment),
                 last_interaction = ?,
-                total_tickets = total_tickets + 1,
-                resolved_tickets = resolved_tickets + ?
+                total_conversations = total_conversations + 1,
+                resolved_conversations = resolved_conversations + ?
             WHERE id = ?
         """, (
             result.get("sentiment"),
-            datetime.now().isoformat(),
+            datetime.utcnow().isoformat(),
             0 if escalated else 1,
-            customer_id,
+            contact_id,
         ))
         conn.commit()
-        logger.info(f"✓ Customer stats updated: {customer_id}")
     except Exception as e:
-        logger.error(f"✗ Customer stats update failed: {e}")
+        logger.error(f"Contact stats update failed: {e}")
         conn.rollback()
     finally:
         conn.close()
 
 
 def emit_activity(event_type: str, message: str, level: str = "info", metadata: Optional[dict] = None):
-    """Create an activity log entry."""
     conn = _get_db()
     try:
         conn.execute("""
             INSERT INTO activity_logs (type, level, message, timestamp, metadata)
             VALUES (?, ?, ?, ?, ?)
         """, (
-            event_type,
-            level,
-            message,
-            datetime.now().isoformat(),
+            event_type, level, message,
+            datetime.utcnow().isoformat(),
             json.dumps(metadata) if metadata else None,
         ))
         conn.commit()
-        logger.info(f"✓ Activity logged: [{event_type}] {message[:60]}")
     except Exception as e:
-        logger.error(f"✗ Activity log failed: {e}")
+        logger.error(f"Activity log failed: {e}")
         conn.rollback()
+    finally:
+        conn.close()
+
+
+def resolve_conversation(conversation_id: str):
+    conn = _get_db()
+    try:
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            UPDATE conversations SET status = 'resolved', resolved_at = ?, updated_at = ? WHERE id = ?
+        """, (now, now, conversation_id))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Conversation resolve failed: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+def close_conversation(conversation_id: str):
+    conn = _get_db()
+    try:
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            UPDATE conversations SET status = 'closed', closed_at = ?, updated_at = ? WHERE id = ?
+        """, (now, now, conversation_id))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Conversation close failed: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+def get_conversation_messages(conversation_id: str) -> list:
+    conn = _get_db()
+    try:
+        rows = conn.execute("""
+            SELECT role, content FROM messages
+            WHERE conversation_id = ?
+            ORDER BY timestamp ASC
+        """, (conversation_id,)).fetchall()
+        return [{"role": r['role'], "content": r['content']} for r in rows]
     finally:
         conn.close()
 
@@ -308,50 +381,35 @@ def persist_workflow_result(
     channel: str,
     message: str,
     result: dict,
-):
-    """
-    Full persistence pipeline after workflow completes.
-    Called from chat, telegram, and email handlers.
-
-    This is the SINGLE entry point for all data persistence.
-    Every step logs success/failure explicitly.
-    """
+) -> str:
     start_time = time.time()
-    logger.info(f"📝 PERSIST START: channel={channel} customer={customer_id} session={session_id}")
 
-    # Step 1: Ensure customer
-    customer_id = ensure_customer(customer_id, channel)
+    contact_id = ensure_contact(customer_id, channel)
+    conversation_id = get_or_create_conversation(contact_id, channel, session_id)
+    user_msg_id = store_user_message(conversation_id, message)
+    execution_id = create_execution(user_msg_id, conversation_id)
 
-    # Step 2: Get or create ticket (deduplicated by session)
-    ticket_id = get_or_create_ticket(customer_id, channel, session_id, message[:100])
+    duration = time.time() - start_time
+    record_execution_steps(execution_id, result, message, duration)
+    complete_execution(execution_id, result, duration)
 
-    # Step 3: Store user message
-    store_message(ticket_id, "user", message)
-
-    # Step 4: Store assistant response
     final_response = result.get("final_response", "")
     if final_response:
-        store_message(ticket_id, "assistant", final_response, agent_type="resolution")
+        store_assistant_message(conversation_id, final_response, execution_id)
 
-    # Step 5: Record agent execution steps
-    duration = time.time() - start_time
-    execution_id = f"exec_{uuid4().hex[:8]}"
-    record_agent_steps(execution_id, ticket_id, session_id, result, message, duration)
+    create_ticket_on_escalation(conversation_id, contact_id, result)
+    update_contact_stats(contact_id, result)
 
-    # Step 6: Update ticket with results
-    update_ticket_from_result(ticket_id, result)
-
-    # Step 7: Update customer stats
-    update_customer_stats(customer_id, result)
-
-    # Step 8: Emit activity
     emit_activity(
-        "system",
-        f"[{channel.upper()}] {result.get('intent', 'unknown')} from {customer_id} — {result.get('priority', 'medium')} priority",
-        metadata={"ticket_id": ticket_id, "channel": channel, "intent": result.get("intent")}
+        "conversation",
+        f"[{channel.upper()}] {result.get('intent', 'unknown')} from {contact_id}",
+        metadata={
+            "conversation_id": conversation_id,
+            "execution_id": execution_id,
+            "channel": channel,
+            "intent": result.get("intent"),
+            "escalated": result.get("escalate", False),
+        }
     )
 
-    total_time = round(time.time() - start_time, 3)
-    logger.info(f"📝 PERSIST COMPLETE: ticket={ticket_id} duration={total_time}s")
-
-    return ticket_id
+    return conversation_id
