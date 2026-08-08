@@ -52,40 +52,79 @@ def get_gmail_service():
     """
     Handles OAuth authentication and returns an authorized Gmail service.
 
-    First run:  Opens browser → you log in → token.json is saved.
-    Later runs: Reads token.json directly (no browser needed).
+    Priority:
+    1. GMAIL_TOKEN_JSON env variable (Serialized JSON string of credentials token)
+    2. GMAIL_TOKEN_PATH file (token.json)
+    3. GMAIL_CREDENTIALS_PATH file / GMAIL_CREDENTIALS_JSON env variable
+
+    In production (ENVIRONMENT=production), opening interactive browser is disabled.
     """
     if not GOOGLE_AUTH_AVAILABLE:
         return None
     creds = None
+    env_name = os.getenv("ENVIRONMENT", "development").lower()
 
-    # Load existing token if available
-    if os.path.exists(TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    # 1. Try loading token from environment variable
+    token_json_env = os.getenv("GMAIL_TOKEN_JSON")
+    if token_json_env:
+        try:
+            info = json.loads(token_json_env)
+            creds = Credentials.from_authorized_user_info(info, SCOPES)
+        except Exception as e:
+            print(f"⚠️ Failed to parse GMAIL_TOKEN_JSON from env: {e}")
 
-    # If no valid credentials, start the OAuth flow
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            # Token expired — silently refresh it
-            creds.refresh(Request())
-        else:
-            # First time — open browser for user authorization
-            if not os.path.exists(CREDENTIALS_FILE):
-                raise FileNotFoundError(
-                    f"\n❌ '{CREDENTIALS_FILE}' not found.\n"
-                    "Download it from: Google Cloud Console → APIs & Services "
-                    "→ Credentials → OAuth 2.0 Client ID → Download JSON\n"
-                    f"Place it in: {os.path.abspath('.')}"
-                )
-            flow = InstalledAppFlow.from_client_secrets_file(
-                CREDENTIALS_FILE, SCOPES
+    # 2. Fallback to token file
+    if not creds and os.path.exists(TOKEN_FILE):
+        try:
+            creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+        except Exception as e:
+            print(f"⚠️ Failed to load token from file {TOKEN_FILE}: {e}")
+
+    # 3. Validate or refresh token
+    if creds and not creds.valid:
+        if creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                print(f"⚠️ Token refresh failed: {e}")
+                creds = None
+
+    # 4. Handle initial authorization if no valid credentials
+    if not creds:
+        if env_name == "production":
+            raise RuntimeError(
+                "❌ Gmail token is missing or expired in production environment. "
+                "Interactive login browser flow is disabled in production. "
+                "Set GMAIL_TOKEN_JSON env var or deploy an authorized token.json file."
             )
-            creds = flow.run_local_server(port=0)
 
-        # Save the token for future runs
-        with open(TOKEN_FILE, "w") as token_file:
-            token_file.write(creds.to_json())
-        print(f"✅ Token saved to '{TOKEN_FILE}' — no login needed next time.\n")
+        # Development interactive authorization flow
+        credentials_json_env = os.getenv("GMAIL_CREDENTIALS_JSON")
+        if credentials_json_env:
+            try:
+                client_config = json.loads(credentials_json_env)
+                flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
+            except Exception as e:
+                raise RuntimeError(f"Failed to load credentials from GMAIL_CREDENTIALS_JSON: {e}")
+        elif os.path.exists(CREDENTIALS_FILE):
+            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+        else:
+            raise FileNotFoundError(
+                f"\n❌ '{CREDENTIALS_FILE}' not found and GMAIL_CREDENTIALS_JSON is unset.\n"
+                "Download it from: Google Cloud Console → APIs & Services "
+                "→ Credentials → OAuth 2.0 Client ID → Download JSON\n"
+                f"Place it in: {os.path.abspath('.')}"
+            )
+
+        creds = flow.run_local_server(port=0)
+
+        # Save token file in dev mode for subsequent runs
+        try:
+            with open(TOKEN_FILE, "w") as token_file:
+                token_file.write(creds.to_json())
+            print(f"✅ Token saved to '{TOKEN_FILE}' — no login needed next time.\n")
+        except Exception as e:
+            print(f"⚠️ Could not write token to file {TOKEN_FILE}: {e}")
 
     return build("gmail", "v1", credentials=creds)
 

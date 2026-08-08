@@ -10,7 +10,13 @@ from .schemas import (
 from core.responses import success, SuccessResponse
 from core.errors import to_http_exception, SupportFlowException
 
-router = APIRouter(prefix="/api/admin/analytics", tags=["analytics"])
+from core.admin_auth import require_admin_auth
+
+router = APIRouter(
+    prefix="/api/admin/analytics",
+    tags=["analytics"],
+    dependencies=[Depends(require_admin_auth)]
+)
 
 def get_analytics_service() -> AnalyticsService:
     return AnalyticsService()

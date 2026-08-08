@@ -155,17 +155,37 @@ async def chat(
 
 
 @router.get("/chat/history/{conversation_id}")
-async def get_chat_history(conversation_id: str):
+async def get_chat_history(
+    conversation_id: str,
+    authorization: Optional[str] = Header(None),
+    sf_session: Optional[str] = Cookie(None)
+):
     from shared.persistence import _get_db
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:].strip()
+    elif sf_session:
+        token = sf_session.strip()
+
+    authenticated_customer_id = None
+    if token:
+        auth_cust = AuthService().get_authenticated_customer(token)
+        if auth_cust:
+            authenticated_customer_id = auth_cust["id"]
+
     conn = _get_db()
     try:
         conv = conn.execute(
-            "SELECT id, status FROM conversations WHERE id = ?",
+            "SELECT id, status, contact_id FROM conversations WHERE id = ?",
             (conversation_id,)
         ).fetchone()
 
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
+
+        # Security check: If request is authenticated, ensure customer owns this conversation
+        if authenticated_customer_id and conv['contact_id'] != authenticated_customer_id:
+            raise HTTPException(status_code=403, detail="Access denied to this conversation.")
 
         messages = conn.execute("""
             SELECT id, role, content, timestamp

@@ -29,3 +29,6 @@ resend==2.5.0
 
 # Telegram Bot
 python-telegram-bot==21.0.1
+
+# Database & PostgreSQL
+psycopg[binary]==3.3.4

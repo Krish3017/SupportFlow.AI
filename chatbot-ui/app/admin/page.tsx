@@ -301,7 +301,7 @@ export default function DashboardPage() {
 
           <div className="pt-4 border-t border-zinc-800/80 text-xs text-zinc-400 font-semibold flex items-center justify-between">
             <span>SupportFlow API Server</span>
-            <span className="text-zinc-100 font-mono">http://localhost:8000</span>
+            <span className="text-zinc-100 font-mono">{process.env.NEXT_PUBLIC_API_URL || 'Connected'}</span>
           </div>
         </div>
       </div>

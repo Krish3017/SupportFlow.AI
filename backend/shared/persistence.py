@@ -115,15 +115,34 @@ def ensure_contact(contact_id: str, channel: str, name: Optional[str] = None) ->
 def get_or_create_conversation(contact_id: str, channel: str, session_token: str) -> str:
     conn = _get_db()
     try:
+        # 1. Try finding active conversation by contact_id
         existing = conn.execute("""
             SELECT id FROM conversations
-            WHERE session_token = ? AND status NOT IN ('closed', 'archived')
+            WHERE contact_id = ? AND status NOT IN ('closed', 'archived')
             ORDER BY updated_at DESC LIMIT 1
-        """, (session_token,)).fetchone()
+        """, (contact_id,)).fetchone()
 
         if existing:
+            # Update session token on active conversation if missing/changed
+            conn.execute(
+                "UPDATE conversations SET session_token = ?, updated_at = ? WHERE id = ?",
+                (session_token, datetime.utcnow().isoformat(), existing['id'])
+            )
+            conn.commit()
             conn.close()
             return existing['id']
+
+        # 2. Fallback: try finding active conversation by session_token
+        if session_token:
+            existing_sess = conn.execute("""
+                SELECT id FROM conversations
+                WHERE session_token = ? AND status NOT IN ('closed', 'archived')
+                ORDER BY updated_at DESC LIMIT 1
+            """, (session_token,)).fetchone()
+
+            if existing_sess:
+                conn.close()
+                return existing_sess['id']
 
         conv_id = _gen_id("conv")
         now = datetime.utcnow().isoformat()

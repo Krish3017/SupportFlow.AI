@@ -131,9 +131,13 @@ export async function checkHealth(): Promise<boolean> {
   }
 }
 
-export async function fetchConversationHistory(conversationId: string): Promise<ConversationHistory | null> {
+export async function fetchConversationHistory(conversationId: string, token?: string): Promise<ConversationHistory | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/chat/history/${conversationId}`);
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(`${API_BASE_URL}/api/chat/history/${conversationId}`, { headers });
     if (!response.ok) return null;
     return await response.json();
   } catch {

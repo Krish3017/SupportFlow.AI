@@ -13,9 +13,15 @@ from core.responses import success, SuccessResponse
 from core.errors import to_http_exception, SupportFlowException
 from core.logging_config import get_logger
 
+from core.admin_auth import require_admin_auth
+
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/admin/conversations", tags=["conversations"])
+router = APIRouter(
+    prefix="/api/admin/conversations",
+    tags=["conversations"],
+    dependencies=[Depends(require_admin_auth)]
+)
 
 def get_conversation_service() -> ConversationService:
     return ConversationService()

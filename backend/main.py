@@ -53,12 +53,6 @@ app.include_router(activity_router)
 app.include_router(email_router)
 
 
-@app.on_event("startup")
-async def start_email_agent():
-    from apps.chat.router import workflow
-    email_agent = EmailAgent(workflow=workflow)
-    asyncio.create_task(email_agent.run())
-    logger.info("Email Agent background task started.")
 
 
 @app.get("/")

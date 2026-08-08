@@ -18,9 +18,11 @@ import { formatDistanceToNow } from 'date-fns';
 
 interface HeaderProps {
   onTriggerReload?: () => void;
+  onAdminLogout?: () => void;
+  adminUsername?: string;
 }
 
-export function Header({ onTriggerReload }: HeaderProps) {
+export function Header({ onTriggerReload, onAdminLogout, adminUsername = 'admin' }: HeaderProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
 
@@ -103,18 +105,16 @@ export function Header({ onTriggerReload }: HeaderProps) {
             <DropdownMenuLabel className="text-xs">
               <div className="flex flex-col">
                 <span className="font-semibold text-zinc-200">Admin Supervisor</span>
-                <span className="text-[10px] text-zinc-500 font-normal">admin@supportflow.ai</span>
+                <span className="text-[10px] text-zinc-400 font-normal">{adminUsername}@supportflow.ai</span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-zinc-800" />
-            <DropdownMenuItem className="text-xs hover:bg-zinc-800">
-              <User className="mr-2 h-3.5 w-3.5" />
-              <span>Profile</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-xs hover:bg-zinc-800">
-              <Settings className="mr-2 h-3.5 w-3.5" />
-              <span>Settings</span>
-            </DropdownMenuItem>
+            {onAdminLogout && (
+              <DropdownMenuItem onClick={onAdminLogout} className="text-xs hover:bg-zinc-800 text-rose-400 focus:text-rose-300 cursor-pointer">
+                <LogOut className="mr-2 h-3.5 w-3.5" />
+                <span>Admin Logout</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

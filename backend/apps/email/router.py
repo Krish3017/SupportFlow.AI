@@ -11,8 +11,13 @@ from .schemas import (
 )
 from core.responses import success, SuccessResponse
 from core.errors import to_http_exception, SupportFlowException
+from core.admin_auth import require_admin_auth
 
-router = APIRouter(prefix="/api/admin/email", tags=["email"])
+router = APIRouter(
+    prefix="/api/admin/email",
+    tags=["email"],
+    dependencies=[Depends(require_admin_auth)]
+)
 
 def get_email_service() -> EmailAdminService:
     return EmailAdminService()

@@ -10,7 +10,13 @@ from .schemas import (
 from core.responses import success, SuccessResponse
 from core.errors import to_http_exception, SupportFlowException
 
-router = APIRouter(prefix="/api/admin/activity", tags=["activity"])
+from core.admin_auth import require_admin_auth
+
+router = APIRouter(
+    prefix="/api/admin/activity",
+    tags=["activity"],
+    dependencies=[Depends(require_admin_auth)]
+)
 
 def get_activity_service() -> ActivityService:
     return ActivityService()

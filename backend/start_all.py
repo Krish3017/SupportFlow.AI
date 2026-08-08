@@ -46,9 +46,9 @@ def start_windows(python_path, backend_dir):
     """Start 3 separate CMD windows on Windows"""
     print("🚀 Starting services in separate Windows terminals...")
 
-    # Telegram Bot - Separate window
+    # Telegram Worker - Separate window
     subprocess.Popen(
-        f'start "Telegram Bot" cmd /k "cd /d {backend_dir} && {python_path} telegram_bot.py"',
+        f'start "Telegram Worker" cmd /k "cd /d {backend_dir} && {python_path} telegram_worker.py"',
         shell=True
     )
     time.sleep(2)
@@ -60,9 +60,9 @@ def start_windows(python_path, backend_dir):
     )
     time.sleep(2)
 
-    # Email Monitor - Separate window
+    # Email Worker - Separate window
     subprocess.Popen(
-        f'start "Email Monitor" cmd /k "cd /d {backend_dir} && {python_path} -c \\"from agents.email_agent import EmailAgent; from routers.chat import workflow; import asyncio; asyncio.run(EmailAgent(workflow).run())\\"',
+        f'start "Email Worker" cmd /k "cd /d {backend_dir} && {python_path} email_worker.py"',
         shell=True
     )
 
@@ -70,10 +70,10 @@ def start_macos(python_path, backend_dir):
     """Start 3 separate Terminal windows on macOS"""
     print("🚀 Starting services in separate macOS Terminal windows...")
 
-    # Telegram Bot
+    # Telegram Worker
     script = f'''
     tell application "Terminal"
-        do script "cd {backend_dir} && {python_path} telegram_bot.py"
+        do script "cd {backend_dir} && {python_path} telegram_worker.py"
         activate
     end tell
     '''
@@ -90,10 +90,10 @@ def start_macos(python_path, backend_dir):
     subprocess.run(['osascript', '-e', script])
     time.sleep(2)
 
-    # Email Monitor
+    # Email Worker
     script = f'''
     tell application "Terminal"
-        do script "cd {backend_dir} && {python_path} -c 'from agents.email_agent import EmailAgent; from routers.chat import workflow; import asyncio; asyncio.run(EmailAgent(workflow).run())'"
+        do script "cd {backend_dir} && {python_path} email_worker.py"
         activate
     end tell
     '''
@@ -105,11 +105,11 @@ def start_linux(python_path, backend_dir):
 
     # Try gnome-terminal
     if subprocess.run(['which', 'gnome-terminal'], capture_output=True).returncode == 0:
-        # Telegram Bot
+        # Telegram Worker
         subprocess.Popen([
             'gnome-terminal', '--',
             'bash', '-c',
-            f'cd {backend_dir} && {python_path} telegram_bot.py; exec bash'
+            f'cd {backend_dir} && {python_path} telegram_worker.py; exec bash'
         ])
         time.sleep(2)
 
@@ -121,28 +121,28 @@ def start_linux(python_path, backend_dir):
         ])
         time.sleep(2)
 
-        # Email Monitor
+        # Email Worker
         subprocess.Popen([
             'gnome-terminal', '--',
             'bash', '-c',
-            f'cd {backend_dir} && {python_path} -c "from agents.email_agent import EmailAgent; from routers.chat import workflow; import asyncio; asyncio.run(EmailAgent(workflow).run())"; exec bash'
+            f'cd {backend_dir} && {python_path} email_worker.py; exec bash'
         ])
 
     # Try xterm
     elif subprocess.run(['which', 'xterm'], capture_output=True).returncode == 0:
-        subprocess.Popen(['xterm', '-e', f'cd {backend_dir} && {python_path} telegram_bot.py'])
+        subprocess.Popen(['xterm', '-e', f'cd {backend_dir} && {python_path} telegram_worker.py'])
         time.sleep(2)
         subprocess.Popen(['xterm', '-e', f'cd {backend_dir} && {python_path} main.py'])
         time.sleep(2)
-        subprocess.Popen(['xterm', '-e', f'cd {backend_dir} && {python_path} -c "from agents.email_agent import EmailAgent; from routers.chat import workflow; import asyncio; asyncio.run(EmailAgent(workflow).run())"'])
+        subprocess.Popen(['xterm', '-e', f'cd {backend_dir} && {python_path} email_worker.py'])
 
     # Try konsole
     elif subprocess.run(['which', 'konsole'], capture_output=True).returncode == 0:
-        subprocess.Popen(['konsole', '-e', f'cd {backend_dir} && {python_path} telegram_bot.py'])
+        subprocess.Popen(['konsole', '-e', f'cd {backend_dir} && {python_path} telegram_worker.py'])
         time.sleep(2)
         subprocess.Popen(['konsole', '-e', f'cd {backend_dir} && {python_path} main.py'])
         time.sleep(2)
-        subprocess.Popen(['konsole', '-e', f'cd {backend_dir} && {python_path} -c "from agents.email_agent import EmailAgent; from routers.chat import workflow; import asyncio; asyncio.run(EmailAgent(workflow).run())"'])
+        subprocess.Popen(['konsole', '-e', f'cd {backend_dir} && {python_path} email_worker.py'])
 
     else:
         print("❌ No supported terminal found. Install: gnome-terminal, xterm, or konsole")
@@ -173,9 +173,9 @@ def main():
 
     print()
     print("✅ Launched 3 separate terminals:")
-    print("   1. Telegram Bot (telegram_bot.py)")
+    print("   1. Telegram Worker (telegram_worker.py)")
     print("   2. API Server (main.py)")
-    print("   3. Email Monitor (EmailAgent)")
+    print("   3. Email Worker (email_worker.py)")
     print()
     print("Press Ctrl+C in each terminal to stop")
 

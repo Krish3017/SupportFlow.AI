@@ -71,22 +71,28 @@ export function ChatContainer() {
     const sessionId = getStoredSessionId();
     sessionIdRef.current = sessionId;
 
+    let currentToken = '';
+    let currentUser: AuthUser | null = null;
+
     // Check stored auth token
     const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
     if (token) {
+      currentToken = token;
       setAuthToken(token);
       const user = await getAuthenticatedCustomer(token);
       if (user) {
+        currentUser = user;
         setAuthUser(user);
       } else {
         localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.CONVERSATION_ID);
       }
     }
 
     const storedConvId = getStoredConversationId();
 
     if (storedConvId) {
-      const history = await fetchConversationHistory(storedConvId);
+      const history = await fetchConversationHistory(storedConvId, currentToken);
       if (history && history.status !== 'closed' && history.status !== 'archived') {
         conversationIdRef.current = storedConvId;
         const restored: Message[] = history.messages.map((m) => ({
@@ -98,12 +104,16 @@ export function ChatContainer() {
         setMessages(restored);
         setIsRestoring(false);
         return;
+      } else {
+        // Clear stale/unauthorized stored conversation ID
+        localStorage.removeItem(STORAGE_KEYS.CONVERSATION_ID);
+        conversationIdRef.current = null;
       }
     }
 
     const sessionInfo = await fetchSessionConversation(sessionId);
     if (sessionInfo.conversation_id) {
-      const history = await fetchConversationHistory(sessionInfo.conversation_id);
+      const history = await fetchConversationHistory(sessionInfo.conversation_id, currentToken);
       if (history && history.status !== 'closed' && history.status !== 'archived') {
         conversationIdRef.current = sessionInfo.conversation_id;
         storeConversationId(sessionInfo.conversation_id);
@@ -128,21 +138,26 @@ export function ChatContainer() {
     e.preventDefault();
     setAuthError('');
     try {
+      let res;
       if (authMode === 'register') {
-        const res = await registerCustomer(emailInput, passwordInput, nameInput);
-        setAuthToken(res.token);
-        setAuthUser(res.user);
-        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, res.token);
+        res = await registerCustomer(emailInput, passwordInput, nameInput);
       } else {
-        const res = await loginCustomer(emailInput, passwordInput);
-        setAuthToken(res.token);
-        setAuthUser(res.user);
-        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, res.token);
+        res = await loginCustomer(emailInput, passwordInput);
       }
+      setAuthToken(res.token);
+      setAuthUser(res.user);
+      localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, res.token);
       setShowAuthModal(false);
       setEmailInput('');
       setPasswordInput('');
       setNameInput('');
+
+      // Refresh chat session for authenticated customer
+      localStorage.removeItem(STORAGE_KEYS.CONVERSATION_ID);
+      conversationIdRef.current = null;
+      restoredRef.current = false;
+      setIsRestoring(true);
+      restoreSession();
     } catch (err: any) {
       setAuthError(err.message || 'Authentication failed.');
     }
@@ -151,8 +166,20 @@ export function ChatContainer() {
   const handleLogout = async () => {
     await logoutCustomer(authToken);
     localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.CONVERSATION_ID);
     setAuthToken('');
     setAuthUser(null);
+    conversationIdRef.current = null;
+    setMessages([]);
+  };
+
+  const handleNewChat = () => {
+    localStorage.removeItem(STORAGE_KEYS.CONVERSATION_ID);
+    conversationIdRef.current = null;
+    const newSessionId = crypto.randomUUID();
+    localStorage.setItem(STORAGE_KEYS.SESSION_ID, newSessionId);
+    sessionIdRef.current = newSessionId;
+    setMessages([]);
   };
 
   const handleSendMessage = async (content: string) => {
@@ -242,6 +269,10 @@ export function ChatContainer() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleNewChat} className="flex items-center gap-1">
+            New Chat
+          </Button>
+
           {authUser ? (
             <Button variant="outline" size="sm" onClick={handleLogout} className="flex items-center gap-1">
               <LogOut className="h-4 w-4" />
