@@ -146,7 +146,7 @@ def parse_email(msg: dict) -> dict:
 
 
 # ─── Core Functions ─────────────────────────────────────────────────────────────
-def fetch_latest_emails(service, max_results: int = 5, label: str = "INBOX") -> list[dict]:
+def fetch_latest_emails(service, max_results: int = 5, label: str = "INBOX") -> list:
     """
     Fetch and parse the latest emails from a Gmail label.
 
@@ -158,8 +158,6 @@ def fetch_latest_emails(service, max_results: int = 5, label: str = "INBOX") -> 
     Returns:
         List of parsed email dicts, newest first.
     """
-    print(f"📬 Fetching {max_results} latest email(s) from {label}...\n")
-
     # Step 1: Get list of message IDs
     results = service.users().messages().list(
         userId="me",
@@ -170,7 +168,6 @@ def fetch_latest_emails(service, max_results: int = 5, label: str = "INBOX") -> 
     messages = results.get("messages", [])
 
     if not messages:
-        print("📭 No emails found.")
         return []
 
     # Step 2: Fetch full content for each message ID

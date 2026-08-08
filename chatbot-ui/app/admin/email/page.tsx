@@ -3,14 +3,11 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LoadingState } from '@/components/ui/loading-state';
+import { DetailDrawer } from '@/components/ui/detail-drawer';
 import { fetchEmails, fetchEmailDetail, sendEmailReply, retryEmail } from '@/lib/api-client';
-import { Search, Mail, RefreshCw, Send } from 'lucide-react';
+import { Search, Mail, RefreshCw, Send, RotateCw, ChevronRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 export default function EmailPage() {
   const [emails, setEmails] = useState<any[]>([]);
@@ -19,6 +16,8 @@ export default function EmailPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEmail, setSelectedEmail] = useState<any>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [drawerLoading, setDrawerLoading] = useState(false);
   const [replyBody, setReplyBody] = useState('');
   const [sending, setSending] = useState(false);
 
@@ -32,7 +31,7 @@ export default function EmailPage() {
       const result = await fetchEmails({
         status: statusFilter === 'all' ? undefined : statusFilter,
         search: searchQuery || undefined,
-        limit: 50
+        limit: 50,
       });
       setEmails(result.emails || []);
       setError(null);
@@ -46,10 +45,14 @@ export default function EmailPage() {
 
   const selectEmail = async (id: number) => {
     try {
+      setDrawerLoading(true);
+      setIsDrawerOpen(true);
       const detail = await fetchEmailDetail(id);
       setSelectedEmail(detail);
     } catch (err) {
       console.error('Failed to load email:', err);
+    } finally {
+      setDrawerLoading(false);
     }
   };
 
@@ -82,133 +85,192 @@ export default function EmailPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'resolved': return 'bg-green-500/10 text-green-500';
-      case 'escalated': return 'bg-red-500/10 text-red-500';
-      case 'pending': return 'bg-blue-500/10 text-blue-500';
-      case 'error': return 'bg-red-500/10 text-red-500';
-      default: return '';
+      case 'resolved':
+        return 'bg-emerald-950/60 text-emerald-400 border-emerald-800/40';
+      case 'escalated':
+        return 'bg-rose-950/60 text-rose-400 border-rose-800/40';
+      case 'pending':
+        return 'bg-amber-950/60 text-amber-400 border-amber-800/40';
+      case 'error':
+        return 'bg-rose-950/60 text-rose-400 border-rose-800/40';
+      default:
+        return 'bg-zinc-900 text-zinc-400 border-zinc-800';
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Email Center</h1>
-        <p className="text-muted-foreground">Manage inbound and outbound emails</p>
+    <div className="space-y-6 select-none">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-zinc-50">Email Center</h1>
+          <p className="text-xs text-zinc-400">Inbound Gmail polling tickets & automated Resend replies</p>
+        </div>
+        <button
+          onClick={loadEmails}
+          className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 hover:text-zinc-100 flex items-center gap-1.5 transition-colors"
+        >
+          <RotateCw className="h-3.5 w-3.5" />
+          <span>Refresh</span>
+        </button>
       </div>
 
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search emails..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
+      {/* Tabs & Search */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center bg-[#111113] border border-zinc-800 p-1 rounded-xl gap-1">
+          {['all', 'pending', 'resolved', 'escalated', 'error'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setStatusFilter(tab)}
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all',
+                statusFilter === tab
+                  ? 'bg-zinc-800 text-zinc-50 border border-zinc-700/60'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              )}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+          <input
+            type="text"
+            placeholder="Search email subject or sender..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[#111113] border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
+          />
+        </div>
       </div>
 
-      <Tabs value={statusFilter} onValueChange={setStatusFilter}>
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="pending">Pending</TabsTrigger>
-          <TabsTrigger value="resolved">Resolved</TabsTrigger>
-          <TabsTrigger value="escalated">Escalated</TabsTrigger>
-          <TabsTrigger value="error">Failed</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value={statusFilter}>
-          {loading ? (
-            <LoadingState message="Loading emails..." />
-          ) : error ? (
-            <Card className="p-8 text-center text-red-500">{error}</Card>
-          ) : emails.length === 0 ? (
-            <Card className="p-8 text-center text-muted-foreground">
-              No emails found
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {emails.map((email) => (
-                <Card
-                  key={email.id}
-                  className="p-4 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => selectEmail(email.id)}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Mail className="size-4 text-muted-foreground" />
-                        <span className="font-medium text-sm truncate">{email.subject}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{email.sender_email}</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Badge variant="outline" className={getStatusColor(email.status)}>
+      {/* Emails Table */}
+      <div className="bg-[#111113] border border-zinc-800/80 rounded-xl p-4">
+        {loading ? (
+          <div className="py-12 text-center text-xs text-zinc-400 animate-pulse">Loading email tickets...</div>
+        ) : error ? (
+          <div className="py-8 text-center text-rose-400 text-xs">{error}</div>
+        ) : emails.length === 0 ? (
+          <div className="py-12 text-center text-zinc-500 text-xs">No email tickets found</div>
+        ) : (
+          <div className="border border-zinc-800/80 rounded-lg overflow-hidden">
+            <table className="w-full text-left text-xs text-zinc-300 border-collapse">
+              <thead className="bg-[#09090b] text-[10px] text-zinc-500 font-bold uppercase tracking-wider border-b border-zinc-800/80">
+                <tr>
+                  <th className="py-2.5 px-3">Subject</th>
+                  <th className="py-2.5 px-3">Sender</th>
+                  <th className="py-2.5 px-3">Received</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Inspect</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60 font-medium">
+                {emails.map((email) => (
+                  <tr
+                    key={email.id}
+                    onClick={() => selectEmail(email.id)}
+                    className="hover:bg-zinc-800/40 cursor-pointer transition-colors group"
+                  >
+                    <td className="py-2.5 px-3 font-semibold text-zinc-100 line-clamp-1">{email.subject}</td>
+                    <td className="py-2.5 px-3 text-zinc-400 font-mono text-[11px]">{email.sender_email}</td>
+                    <td className="py-2.5 px-3 text-zinc-400 text-[11px]">
+                      {email.created_at ? formatDistanceToNow(new Date(email.created_at), { addSuffix: true }) : 'Recently'}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className={cn('text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase', getStatusColor(email.status))}>
                         {email.status}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date(email.created_at), { addSuffix: true })}
                       </span>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <ChevronRight className="h-4 w-4 text-zinc-500 group-hover:text-zinc-200 inline-block" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
-      {selectedEmail && (
-        <Card className="p-6 border-2">
+      {/* In-Context Side Drawer for Email Inspection & Manual Reply */}
+      <DetailDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        title="Email Ticket Inspection"
+        subtitle={selectedEmail?.subject || 'Loading email...'}
+        widthClass="max-w-xl"
+      >
+        {drawerLoading ? (
+          <div className="py-12 text-center text-zinc-400 text-xs animate-pulse">Loading email content...</div>
+        ) : selectedEmail ? (
           <div className="space-y-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">{selectedEmail.subject}</h3>
-                <p className="text-sm text-muted-foreground">From: {selectedEmail.sender_email}</p>
+            <div className="p-3 bg-[#111113] border border-zinc-800 rounded-lg text-xs space-y-2">
+              <div className="flex justify-between">
+                <span className="text-zinc-500">From:</span>
+                <span className="font-mono text-zinc-200">{selectedEmail.sender_email}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className={getStatusColor(selectedEmail.status)}>
-                  {selectedEmail.status}
-                </Badge>
-                {selectedEmail.status === 'error' && (
-                  <Button size="sm" variant="outline" onClick={() => handleRetry(selectedEmail.id)}>
-                    <RefreshCw className="mr-1 size-3" />
-                    Retry
-                  </Button>
-                )}
+              <div className="flex justify-between">
+                <span className="text-zinc-500">Subject:</span>
+                <span className="font-semibold text-zinc-100">{selectedEmail.subject}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-500">Status:</span>
+                <div className="flex items-center gap-2">
+                  <span className={cn('px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase', getStatusColor(selectedEmail.status))}>
+                    {selectedEmail.status}
+                  </span>
+                  {selectedEmail.status === 'error' && (
+                    <button
+                      onClick={() => handleRetry(selectedEmail.id)}
+                      className="px-2 py-0.5 bg-zinc-800 text-zinc-200 rounded text-[10px] flex items-center gap-1 hover:bg-zinc-700"
+                    >
+                      <RefreshCw className="h-3 w-3" /> Retry
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="p-4 bg-muted rounded-lg">
-              <p className="text-sm whitespace-pre-wrap">{selectedEmail.body}</p>
+            {/* Email Inbound Body */}
+            <div className="bg-[#111113] border border-zinc-800 p-3 rounded-lg text-xs">
+              <span className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Inbound Body</span>
+              <p className="text-zinc-300 whitespace-pre-wrap leading-relaxed">{selectedEmail.body}</p>
             </div>
 
+            {/* Automated AI Response */}
             {selectedEmail.ai_response && (
-              <div className="p-4 bg-green-500/5 border border-green-500/20 rounded-lg">
-                <p className="text-xs font-semibold text-green-600 mb-2">AI Response</p>
-                <p className="text-sm whitespace-pre-wrap">{selectedEmail.ai_response}</p>
+              <div className="bg-emerald-950/40 border border-emerald-800/60 p-3 rounded-lg text-xs space-y-1">
+                <span className="text-[10px] text-emerald-400 font-bold uppercase block">Automated AI Resolution</span>
+                <p className="text-emerald-200 whitespace-pre-wrap leading-relaxed">{selectedEmail.ai_response}</p>
               </div>
             )}
 
-            <div className="pt-4 border-t">
-              <h4 className="font-semibold mb-2">Manual Reply</h4>
-              <Textarea
-                placeholder="Type your reply..."
+            {/* Manual Outbound Reply */}
+            <div className="pt-3 border-t border-zinc-800 space-y-2">
+              <span className="text-[10px] text-zinc-400 font-bold uppercase block">Send Manual Reply via Resend API</span>
+              <textarea
+                placeholder="Type manual response to send directly to customer..."
                 value={replyBody}
                 onChange={(e) => setReplyBody(e.target.value)}
                 rows={4}
+                className="w-full bg-[#111113] border border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
               />
-              <Button
-                className="mt-2"
+              <button
                 onClick={handleReply}
                 disabled={sending || !replyBody.trim()}
+                className="px-3 py-1.5 bg-emerald-950 border border-emerald-800 text-emerald-300 rounded-lg text-xs font-bold hover:bg-emerald-900 flex items-center gap-1.5 transition-colors"
               >
-                <Send className="mr-2 size-4" />
-                {sending ? 'Sending...' : 'Send Reply'}
-              </Button>
+                <Send className="h-3.5 w-3.5" />
+                <span>{sending ? 'Sending via Resend...' : 'Send Outbound Reply'}</span>
+              </button>
             </div>
           </div>
-        </Card>
-      )}
+        ) : (
+          <div className="py-12 text-center text-zinc-500 text-xs">No email selected</div>
+        )}
+      </DetailDrawer>
     </div>
   );
 }

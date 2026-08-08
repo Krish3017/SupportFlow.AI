@@ -38,9 +38,13 @@ class EmailAgent:
     def _connect_gmail(self):
         try:
             self.gmail_service = get_gmail_service()
-            self.support_label_id = self._get_label_id("support")
+            label_setting = os.getenv("GMAIL_LABEL", "INBOX").strip()
+            if label_setting.upper() == "INBOX":
+                self.support_label_id = "INBOX"
+            else:
+                self.support_label_id = self._get_label_id(label_setting)
         except Exception as e:
-            logger.error(f"Email Agent Gmail connection failed: {e}")
+            logger.error(f"[EMAIL] Gmail connection failed: {e}")
             raise
 
     def _get_label_id(self, label_name: str) -> str:
@@ -56,24 +60,36 @@ class EmailAgent:
 
     async def _process_email(self, email: dict):
         ticket_id = None
+        current_step = "initializing ticket"
         try:
+            logger.info("[EMAIL] Processing started")
+
+            current_step = "save_email_ticket"
             ticket_id = save_email_ticket(email)
 
             start_time = time.time()
             session_id = f"email_{email['id']}"
             message_content = f"Subject: {email['subject']}\n\n{email['body']}"
 
+            current_step = "resolving sender"
             contact_id = ensure_contact(email["sender"], "email")
+            logger.info("[EMAIL] Sender resolved")
+
+            current_step = "resolving conversation"
             conversation_id = get_or_create_conversation(contact_id, "email", session_id)
             user_msg_id = store_user_message(conversation_id, message_content)
             execution_id = create_execution(user_msg_id, conversation_id)
+            logger.info("[EMAIL] Conversation resolved")
 
+            current_step = "LangGraph execution"
+            logger.info("[EMAIL] LangGraph execution started")
             result = await self.workflow.ainvoke({
                 "customer_message": message_content,
                 "customer_id": contact_id,
                 "session_id": session_id,
                 "chat_history": [],
             })
+            logger.info("[EMAIL] LangGraph execution completed")
 
             duration = time.time() - start_time
             record_execution_steps(execution_id, result, message_content, duration)
@@ -84,6 +100,7 @@ class EmailAgent:
             intent = result.get("intent", "unknown")
             priority = result.get("priority", "medium")
             sentiment = result.get("sentiment", "neutral")
+            logger.info("[EMAIL] Final response generated")
 
             if final_response:
                 store_assistant_message(conversation_id, final_response, execution_id)
@@ -115,6 +132,8 @@ class EmailAgent:
             except Exception:
                 pass
 
+            current_step = "sending response"
+            logger.info("[EMAIL] Sending response")
             if escalate:
                 self.email_service.send_escalation(
                     to=email["sender"],
@@ -134,8 +153,10 @@ class EmailAgent:
                 )
                 update_email_ticket(ticket_id, "resolved", final_response)
 
+            logger.info("[EMAIL] Response sent successfully")
+
         except Exception as e:
-            logger.error(f"Error processing email ticket #{ticket_id}: {e}")
+            logger.error(f"[EMAIL] FAILED at {current_step}: {e}")
             if ticket_id:
                 update_email_ticket(ticket_id, "error", str(e))
 
@@ -146,21 +167,23 @@ class EmailAgent:
                 max_results=10,
                 label=self.support_label_id
             )
+            logger.info(f"[EMAIL] Fetched {len(emails)} email(s)")
 
-            new_emails = [
-                email for email in emails
-                if not is_email_processed(email["id"])
-            ]
+            new_emails = []
+            for email in emails:
+                msg_id = email["id"]
+                logger.info(f"[EMAIL] Checking message: {msg_id}")
+                if is_email_processed(msg_id):
+                    logger.info(f"[EMAIL] Skipping message: {msg_id} — reason: already processed in database")
+                else:
+                    logger.info(f"[EMAIL] Processing message: {msg_id}")
+                    new_emails.append(email)
 
-            if not new_emails:
-                return
-
-            logger.info(f"{len(new_emails)} new email(s) found.")
             for email in new_emails:
                 await self._process_email(email)
 
         except Exception as e:
-            logger.error(f"Poll error: {e}")
+            logger.error(f"[EMAIL] Poll error: {e}")
 
     async def run(self):
         logger.info(f"Email Agent started. Polling every {POLL_INTERVAL_MINUTES} minute(s).")

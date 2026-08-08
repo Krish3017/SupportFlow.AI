@@ -153,7 +153,7 @@ export async function fetchSessionConversation(sessionId: string): Promise<Sessi
 
 export interface AuthUser {
   id: string;
-  email: str;
+  email: string;
   name?: string;
   company_customer_id?: string;
 }

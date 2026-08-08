@@ -3,8 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   LayoutDashboard,
   MessageSquare,
@@ -16,135 +14,144 @@ import {
   Activity,
   Settings,
   Mail,
+  HelpCircle,
+  FileText,
+  Sparkles,
 } from 'lucide-react';
 
-interface NavItem {
-  title: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: number;
-  badgeVariant?: 'default' | 'destructive' | 'warning';
-  separator?: boolean;
+interface NavGroup {
+  groupName: string;
+  items: {
+    name: string;
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: string | number;
+    badgeColor?: string;
+  }[];
 }
 
-const navItems: NavItem[] = [
+const navGroups: NavGroup[] = [
   {
-    title: 'Overview',
-    href: '/admin',
-    icon: LayoutDashboard,
+    groupName: 'OPERATIONS',
+    items: [
+      { name: 'Overview', href: '/admin', icon: LayoutDashboard },
+      { name: 'Conversations', href: '/admin/conversations', icon: MessageSquare },
+      { name: 'Tickets', href: '/admin/tickets', icon: Ticket, badge: 'Live' },
+      { name: 'Customers', href: '/admin/customers', icon: Users },
+    ],
   },
   {
-    title: 'Conversations',
-    href: '/admin/conversations',
-    icon: MessageSquare,
-    separator: true,
+    groupName: 'AI ENGINE',
+    items: [
+      { name: 'AI Observatory', href: '/admin/ai-observatory', icon: Microscope, badge: '6 Agents', badgeColor: 'bg-emerald-950/80 text-emerald-400 border-emerald-800/60' },
+      { name: 'Knowledge Base', href: '/admin/knowledge', icon: BookOpen },
+    ],
   },
   {
-    title: 'Tickets',
-    href: '/admin/tickets',
-    icon: Ticket,
-    badge: 23,
+    groupName: 'COMMUNICATION',
+    items: [
+      { name: 'Email Center', href: '/admin/email', icon: Mail },
+    ],
   },
   {
-    title: 'Customers',
-    href: '/admin/customers',
-    icon: Users,
-    separator: true,
-  },
-  {
-    title: 'AI Observatory',
-    href: '/admin/ai-observatory',
-    icon: Microscope,
-    badge: 2,
-    badgeVariant: 'destructive',
-  },
-  {
-    title: 'Knowledge Base',
-    href: '/admin/knowledge',
-    icon: BookOpen,
-    separator: true,
-  },
-  {
-    title: 'Email Center',
-    href: '/admin/email',
-    icon: Mail,
-    separator: true,
-  },
-  {
-    title: 'Analytics',
-    href: '/admin/analytics',
-    icon: BarChart3,
-  },
-  {
-    title: 'Activity',
-    href: '/admin/activity',
-    icon: Activity,
-    separator: true,
-  },
-  {
-    title: 'Settings',
-    href: '/admin/settings',
-    icon: Settings,
+    groupName: 'INSIGHTS & SYSTEM',
+    items: [
+      { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
+      { name: 'Activity Log', href: '/admin/activity', icon: Activity },
+      { name: 'Settings', href: '/admin/settings', icon: Settings },
+    ],
   },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
 
-  const getBadgeVariant = (variant?: 'default' | 'destructive' | 'warning') => {
-    if (variant === 'destructive') return 'bg-red-500 text-white';
-    if (variant === 'warning') return 'bg-amber-500 text-white';
-    return 'bg-primary text-primary-foreground';
-  };
-
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 border-r bg-sidebar">
-      <div className="flex h-full flex-col">
-        {/* Logo */}
-        <div className="flex h-14 items-center border-b px-6">
-          <Link href="/admin" className="flex items-center gap-2 font-semibold">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <span className="text-sm font-bold">SF</span>
-            </div>
-            <span className="text-sm">SupportFlow AI</span>
-          </Link>
+    <aside className="w-56 bg-[#09090b] border-r border-zinc-800/80 p-3 flex flex-col justify-between flex-shrink-0 h-screen fixed left-0 top-0 z-30 select-none">
+      <div>
+        {/* Brand Logo Header */}
+        <div className="flex items-center gap-2.5 px-2 py-2 mb-4 border-b border-zinc-800/60">
+          <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-zinc-950 font-bold text-xs shadow-[0_0_12px_rgba(52,211,153,0.3)]">
+            <Sparkles className="h-4 w-4 fill-zinc-950" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xs font-bold text-zinc-50 tracking-tight">SupportFlow AI</span>
+            <span className="text-[9px] text-zinc-500 font-medium">Multi-Agent System</span>
+          </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-4">
-          <ul className="space-y-1">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
-              const Icon = item.icon;
+        {/* Grouped Navigation */}
+        <nav className="space-y-4">
+          {navGroups.map((group) => (
+            <div key={group.groupName}>
+              <div className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-1.5 px-2">
+                {group.groupName}
+              </div>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive =
+                    item.href === '/admin'
+                      ? pathname === '/admin'
+                      : pathname?.startsWith(item.href);
 
-              return (
-                <li key={item.href}>
-                  <Link href={item.href}>
-                    <Button
-                      variant={isActive ? 'secondary' : 'ghost'}
-                      className={cn(
-                        'w-full justify-start gap-3',
-                        isActive && 'bg-sidebar-accent text-sidebar-accent-foreground'
-                      )}
-                    >
-                      <Icon className="size-4" />
-                      <span className="flex-1 text-left">{item.title}</span>
-                      {item.badge !== undefined && (
-                        <Badge
-                          variant="outline"
-                          className={cn('h-5 px-1.5 text-xs', getBadgeVariant(item.badgeVariant))}
-                        >
-                          {item.badge}
-                        </Badge>
-                      )}
-                    </Button>
-                  </Link>
-                  {item.separator && <div className="my-2 border-t" />}
-                </li>
-              );
-            })}
-          </ul>
+                  return (
+                    <Link key={item.href} href={item.href}>
+                      <button
+                        className={cn(
+                          'w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all group',
+                          isActive
+                            ? 'bg-zinc-800/90 text-zinc-50 font-semibold border border-zinc-700/50 shadow-sm'
+                            : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Icon
+                            className={cn(
+                              'h-3.5 w-3.5 transition-colors',
+                              isActive ? 'text-emerald-400' : 'text-zinc-400 group-hover:text-zinc-200'
+                            )}
+                          />
+                          <span>{item.name}</span>
+                        </div>
+
+                        {item.badge !== undefined && (
+                          <span
+                            className={cn(
+                              'text-[9px] font-medium px-1.5 py-0.2 rounded-full border',
+                              item.badgeColor || 'bg-zinc-800 text-zinc-300 border-zinc-700/50'
+                            )}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
+      </div>
+
+      {/* Footer Info Box */}
+      <div className="space-y-2 pt-2 border-t border-zinc-800/60">
+        <div className="p-2 rounded-lg bg-zinc-900/60 border border-zinc-800/60 text-[10px]">
+          <div className="text-[9px] text-emerald-400 uppercase tracking-wider font-bold">
+            System Online
+          </div>
+          <div className="font-semibold text-zinc-200 mt-0.5">FastAPI & LangGraph</div>
+          <div className="text-[9px] text-zinc-400">Groq LLM Active</div>
+        </div>
+
+        <div className="flex items-center justify-between text-[10px] text-zinc-500 px-1 pt-1">
+          <Link href="/chat" className="flex items-center gap-1 hover:text-zinc-300 transition-colors">
+            <HelpCircle className="h-3 w-3" />
+            <span>Chatbot</span>
+          </Link>
+          <span>v2.4.0</span>
+        </div>
       </div>
     </aside>
   );
