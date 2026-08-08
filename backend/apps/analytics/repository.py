@@ -107,7 +107,7 @@ class AnalyticsRepository(BaseRepository):
                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
                 AVG(latency) as avg_latency
             FROM execution_steps
-            GROUP BY agent_id
+            GROUP BY agent_id, agent_name
         """
         return self._execute_query(query, fetch_all=True) or []
 

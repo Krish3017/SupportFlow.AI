@@ -175,24 +175,27 @@ async def get_chat_history(
 
     conn = _get_db()
     try:
-        conv = conn.execute(
-            "SELECT id, status, contact_id FROM conversations WHERE id = ?",
-            (conversation_id,)
-        ).fetchone()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, status, contact_id FROM supportflow.conversations WHERE id = %s",
+                (conversation_id,)
+            )
+            conv = cur.fetchone()
 
-        if not conv:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            if not conv:
+                raise HTTPException(status_code=404, detail="Conversation not found")
 
-        # Security check: If request is authenticated, ensure customer owns this conversation
-        if authenticated_customer_id and conv['contact_id'] != authenticated_customer_id:
-            raise HTTPException(status_code=403, detail="Access denied to this conversation.")
+            # Security check: If request is authenticated, ensure customer owns this conversation
+            if authenticated_customer_id and conv['contact_id'] != authenticated_customer_id:
+                raise HTTPException(status_code=403, detail="Access denied to this conversation.")
 
-        messages = conn.execute("""
-            SELECT id, role, content, timestamp
-            FROM messages
-            WHERE conversation_id = ?
-            ORDER BY timestamp ASC
-        """, (conversation_id,)).fetchall()
+            cur.execute("""
+                SELECT id, role, content, timestamp
+                FROM supportflow.messages
+                WHERE conversation_id = %s
+                ORDER BY timestamp ASC
+            """, (conversation_id,))
+            messages = cur.fetchall()
 
         return {
             "conversation_id": conv['id'],
@@ -216,15 +219,17 @@ async def get_session_conversation(session_id: str):
     from shared.persistence import _get_db
     conn = _get_db()
     try:
-        conv = conn.execute("""
-            SELECT id, status FROM conversations
-            WHERE session_token = ? AND status NOT IN ('closed', 'archived')
-            ORDER BY updated_at DESC LIMIT 1
-        """, (session_id,)).fetchone()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, status FROM supportflow.conversations
+                WHERE session_token = %s AND status NOT IN ('closed', 'archived')
+                ORDER BY updated_at DESC LIMIT 1
+            """, (session_id,))
+            conv = cur.fetchone()
 
-        if not conv:
-            return {"conversation_id": None, "status": None}
+            if not conv:
+                return {"conversation_id": None, "status": None}
 
-        return {"conversation_id": conv['id'], "status": conv['status']}
+            return {"conversation_id": conv['id'], "status": conv['status']}
     finally:
         conn.close()

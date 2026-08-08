@@ -63,9 +63,11 @@ async def process_through_workflow(
         conn = _get_db()
         comp_cust_id = None
         try:
-            row = conn.execute("SELECT company_customer_id, email FROM customers WHERE id = ?", (contact_id,)).fetchone()
-            if row:
-                comp_cust_id = row['company_customer_id']
+            with conn.cursor() as cur:
+                cur.execute("SELECT company_customer_id, email FROM supportflow.customers WHERE id = %s", (contact_id,))
+                row = cur.fetchone()
+                if row:
+                    comp_cust_id = row['company_customer_id']
         finally:
             conn.close()
 
@@ -81,7 +83,8 @@ async def process_through_workflow(
                 # Try updating contact email in SupportFlow DB (ignore if duplicate email)
                 conn = _get_db()
                 try:
-                    conn.execute("UPDATE customers SET email = ? WHERE id = ?", (candidate_email, contact_id))
+                    with conn.cursor() as cur:
+                        cur.execute("UPDATE supportflow.customers SET email = %s WHERE id = %s", (candidate_email, contact_id))
                     conn.commit()
                 except Exception as ex_db:
                     logger.debug(f"Could not update contact email to {candidate_email}: {ex_db}")
@@ -475,11 +478,15 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         from shared.persistence import close_conversation, _get_db
         conn = _get_db()
-        existing = conn.execute("""
-            SELECT id FROM conversations
-            WHERE session_token = ? AND status NOT IN ('closed', 'archived')
-        """, (session_id,)).fetchone()
-        conn.close()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id FROM supportflow.conversations
+                    WHERE session_token = %s AND status NOT IN ('closed', 'archived')
+                """, (session_id,))
+                existing = cur.fetchone()
+        finally:
+            conn.close()
 
         if existing:
             close_conversation(existing['id'])

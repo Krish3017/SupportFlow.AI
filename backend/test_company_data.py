@@ -64,21 +64,21 @@ def run_unit_tests():
     assert len(res3["orders"]) >= 1
     print("[PASS] Test 3: Retrieve customer's orders")
 
-    # Test 4: Retrieve order details
-    res4 = get_order_details("ORD-1001")
+    # Test 4: Retrieve order details (scoped)
+    res4 = get_order_details("ORD-1001", "CUST-1001")
     assert res4["found"] is True, "Test 4 Failed: Order details not found"
     assert res4["order"]["customer_id"] == "CUST-1001"
     assert len(res4["items"]) >= 1
     print("[PASS] Test 4: Retrieve order details")
 
-    # Test 5: Retrieve shipment status
-    res5 = get_shipment_status("ORD-1001")
+    # Test 5: Retrieve shipment status (scoped)
+    res5 = get_shipment_status("ORD-1001", "CUST-1001")
     assert res5["found"] is True, "Test 5 Failed: Shipment status not found"
     assert res5["carrier"] == "FedEx"
     print("[PASS] Test 5: Retrieve shipment status")
 
-    # Test 6: Retrieve payment status
-    res6 = get_payment_status("ORD-1001")
+    # Test 6: Retrieve payment status (scoped)
+    res6 = get_payment_status("ORD-1001", "CUST-1001")
     assert res6["found"] is True, "Test 6 Failed: Payment status not found"
     assert res6["payment_status"] == "successful"
     print("[PASS] Test 6: Retrieve payment status")
@@ -89,8 +89,8 @@ def run_unit_tests():
     assert res7["product"]["product_name"] == "Wireless Noise-Canceling Headphones"
     print("[PASS] Test 7: Retrieve product details")
 
-    # Test 8: Retrieve subscription
-    res8 = get_customer_subscription("alice.johnson@example.com")
+    # Test 8: Retrieve subscription (scoped)
+    res8 = get_customer_subscription("CUST-1001")
     assert res8["found"] is True, "Test 8 Failed: Subscription not found"
     assert res8["subscription"]["plan"] == "Pro Care Plan"
     print("[PASS] Test 8: Retrieve subscription")
@@ -101,30 +101,33 @@ def run_unit_tests():
     print("[PASS] Test 9: Invalid customer handled correctly")
 
     # Test 10: Invalid order
-    res10 = get_order_details("ORD-999999")
+    res10 = get_order_details("ORD-999999", "CUST-1001")
     assert res10["found"] is False, "Test 10 Failed: Invalid order should return found=False"
     print("[PASS] Test 10: Invalid order handled correctly")
 
-    # Test 11: Verify foreign-key relationships
+    # Test 11: Verify foreign-key relationships in PostgreSQL
     conn = get_company_db_connection()
     try:
-        # Check every order belongs to existing customer
-        orphan_orders = conn.execute("""
-            SELECT o.order_id FROM orders o
-            LEFT JOIN customers c ON o.customer_id = c.customer_id
-            WHERE c.customer_id IS NULL
-        """).fetchall()
-        assert len(orphan_orders) == 0, "Test 11 Failed: Found orphan orders without valid customer FK"
+        with conn.cursor() as cur:
+            # Check every order belongs to existing customer
+            cur.execute("""
+                SELECT o.order_id FROM company.orders o
+                LEFT JOIN company.customers c ON o.customer_id = c.customer_id
+                WHERE c.customer_id IS NULL
+            """)
+            orphan_orders = cur.fetchall()
+            assert len(orphan_orders) == 0, "Test 11 Failed: Found orphan orders without valid customer FK"
 
-        # Check order_items reference valid order and product
-        orphan_items = conn.execute("""
-            SELECT oi.item_id FROM order_items oi
-            LEFT JOIN orders o ON oi.order_id = o.order_id
-            LEFT JOIN products p ON oi.product_id = p.product_id
-            WHERE o.order_id IS NULL OR p.product_id IS NULL
-        """).fetchall()
-        assert len(orphan_items) == 0, "Test 11 Failed: Found orphan order items without valid FKs"
-        print("[PASS] Test 11: Foreign-key relationships intact")
+            # Check order_items reference valid order and product
+            cur.execute("""
+                SELECT oi.item_id FROM company.order_items oi
+                LEFT JOIN company.orders o ON oi.order_id = o.order_id
+                LEFT JOIN company.products p ON oi.product_id = p.product_id
+                WHERE o.order_id IS NULL OR p.product_id IS NULL
+            """)
+            orphan_items = cur.fetchall()
+            assert len(orphan_items) == 0, "Test 11 Failed: Found orphan order items without valid FKs"
+            print("[PASS] Test 11: Foreign-key relationships intact")
     finally:
         conn.close()
 

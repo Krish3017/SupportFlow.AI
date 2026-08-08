@@ -31,11 +31,13 @@ def _resolve_company_customer_id(sf_customer_id: str) -> Optional[str]:
     """
     conn = _get_db()
     try:
-        row = conn.execute(
-            "SELECT company_customer_id FROM customers WHERE id = ?",
-            (sf_customer_id,)
-        ).fetchone()
-        return row['company_customer_id'] if row else None
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT company_customer_id FROM supportflow.customers WHERE id = %s",
+                (sf_customer_id,)
+            )
+            row = cur.fetchone()
+            return row['company_customer_id'] if row else None
     finally:
         conn.close()
 
@@ -48,10 +50,12 @@ def get_company_profile_for_customer(sf_customer_id: str) -> Dict[str, Any]:
     """
     conn = _get_db()
     try:
-        sf_row = conn.execute(
-            "SELECT id, email, company_customer_id FROM customers WHERE id = ?",
-            (sf_customer_id,)
-        ).fetchone()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, email, company_customer_id FROM supportflow.customers WHERE id = %s",
+                (sf_customer_id,)
+            )
+            sf_row = cur.fetchone()
     finally:
         conn.close()
 

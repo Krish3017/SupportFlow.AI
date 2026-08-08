@@ -28,7 +28,7 @@ class ObservatoryRepository(BaseRepository):
                 AVG(latency) as avg_latency,
                 MAX(started_at) as last_execution
             FROM execution_steps
-            GROUP BY agent_id
+            GROUP BY agent_id, agent_name
             ORDER BY agent_id
         """
         results = self._execute_query(query, fetch_all=True)
@@ -45,10 +45,10 @@ class ObservatoryRepository(BaseRepository):
                 AVG(latency) as avg_latency,
                 MAX(started_at) as last_execution
             FROM execution_steps
-            WHERE agent_id = ?
-            GROUP BY agent_id
+            WHERE agent_id = %s OR agent_name = %s
+            GROUP BY agent_id, agent_name
         """
-        stats = self._execute_query(stats_query, (agent_name,), fetch_one=True)
+        stats = self._execute_query(stats_query, (agent_name, agent_name), fetch_one=True)
 
         if not stats:
             raise NotFoundError(resource="Agent", identifier=agent_name)

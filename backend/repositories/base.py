@@ -1,7 +1,7 @@
-import sqlite3
+import psycopg
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
-from core.config import settings
+from core.postgres import get_postgres_connection
 from core.errors import DatabaseError
 from core.logging_config import get_logger
 
@@ -11,21 +11,21 @@ logger = get_logger(__name__)
 class BaseRepository:
 
     def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or settings.DATABASE_PATH
+        self.db_path = db_path
 
     @contextmanager
     def get_connection(self):
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys=ON")
+            conn = get_postgres_connection()
+            with conn.cursor() as cur:
+                cur.execute("SET search_path TO supportflow, public;")
             yield conn
             conn.commit()
-        except sqlite3.Error as e:
+        except Exception as e:
             if conn:
                 conn.rollback()
-            logger.error(f"Database error: {e}")
+            logger.error(f"PostgreSQL connection error: {e}")
             raise DatabaseError(operation="connection", details={"error": str(e)})
         finally:
             if conn:
@@ -39,29 +39,33 @@ class BaseRepository:
         fetch_all: bool = False
     ) -> Optional[Any]:
         try:
+            # Convert positional ? parameters to PostgreSQL %s format if present
+            pg_query = query.replace("?", "%s")
             with self.get_connection() as conn:
-                cursor = conn.execute(query, params)
+                with conn.cursor() as cur:
+                    cur.execute(pg_query, params)
 
-                if fetch_one:
-                    row = cursor.fetchone()
-                    return dict(row) if row else None
+                    if fetch_one:
+                        row = cur.fetchone()
+                        return dict(row) if row else None
 
-                if fetch_all:
-                    rows = cursor.fetchall()
-                    return [dict(row) for row in rows]
+                    if fetch_all:
+                        rows = cur.fetchall()
+                        return [dict(row) for row in rows]
 
-                return cursor.lastrowid
+                    return cur.rowcount
 
-        except sqlite3.Error as e:
+        except Exception as e:
             logger.error(f"Query execution failed: {query[:100]} | Error: {e}")
             raise DatabaseError(operation="query", details={"query": query[:100], "error": str(e)})
 
     def _count(self, table: str, conditions: Optional[Dict[str, Any]] = None) -> int:
-        query = f"SELECT COUNT(*) as count FROM {table}"
+        table_name = table if "." in table else f"supportflow.{table}"
+        query = f"SELECT COUNT(*) as count FROM {table_name}"
         params = []
 
         if conditions:
-            where_clauses = [f"{k} = ?" for k in conditions.keys()]
+            where_clauses = [f"{k} = %s" for k in conditions.keys()]
             query += " WHERE " + " AND ".join(where_clauses)
             params = list(conditions.values())
 
@@ -70,3 +74,4 @@ class BaseRepository:
 
     def _exists(self, table: str, conditions: Dict[str, Any]) -> bool:
         return self._count(table, conditions) > 0
+

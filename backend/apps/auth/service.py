@@ -1,7 +1,6 @@
 import os
 import hashlib
 import hmac
-import sqlite3
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
 from uuid import uuid4
@@ -51,10 +50,11 @@ class AuthService:
         expires = now + timedelta(hours=SESSION_EXPIRE_HOURS)
         conn = _get_db()
         try:
-            conn.execute("""
-                INSERT INTO customer_sessions (session_token, customer_id, created_at, expires_at)
-                VALUES (?, ?, ?, ?)
-            """, (token, customer_id, now.isoformat(), expires.isoformat()))
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO supportflow.customer_sessions (session_token, customer_id, created_at, expires_at)
+                    VALUES (%s, %s, %s, %s)
+                """, (token, customer_id, now.isoformat(), expires.isoformat()))
             conn.commit()
         finally:
             conn.close()
@@ -69,27 +69,28 @@ class AuthService:
 
         conn = _get_db()
         try:
-            existing = conn.execute("SELECT id, password_hash, company_customer_id FROM customers WHERE LOWER(email) = ?", (email_clean,)).fetchone()
-            pw_hash = hash_password(password)
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, password_hash, company_customer_id FROM supportflow.customers WHERE LOWER(email) = LOWER(%s)", (email_clean,))
+                existing = cur.fetchone()
+                pw_hash = hash_password(password)
 
-            if existing:
-                if existing['password_hash']:
-                    raise ValidationError("A customer account with this email already exists.", details={"code": "USER_EXISTS"})
-                # Update existing contact record with password
-                contact_id = existing['id']
-                conn.execute(
-                    "UPDATE customers SET password_hash = ?, name = COALESCE(?, name) WHERE id = ?",
-                    (pw_hash, name or email_clean.split("@")[0], contact_id)
-                )
-                company_cust_id = existing['company_customer_id']
-            else:
-                contact_id = f"cust_{uuid4().hex[:12]}"
-                now = datetime.utcnow().isoformat()
-                conn.execute("""
-                    INSERT INTO customers (id, name, email, password_hash, tier, sentiment, joined_date, last_interaction)
-                    VALUES (?, ?, ?, ?, 'standard', 'neutral', ?, ?)
-                """, (contact_id, name or email_clean.split("@")[0], email_clean, pw_hash, now, now))
-                company_cust_id = None
+                if existing:
+                    if existing['password_hash']:
+                        raise ValidationError("A customer account with this email already exists.", details={"code": "USER_EXISTS"})
+                    contact_id = existing['id']
+                    cur.execute(
+                        "UPDATE supportflow.customers SET password_hash = %s, name = COALESCE(%s, name) WHERE id = %s",
+                        (pw_hash, name or email_clean.split("@")[0], contact_id)
+                    )
+                    company_cust_id = existing['company_customer_id']
+                else:
+                    contact_id = f"cust_{uuid4().hex[:12]}"
+                    now = datetime.utcnow().isoformat()
+                    cur.execute("""
+                        INSERT INTO supportflow.customers (id, name, email, password_hash, tier, sentiment, joined_date, last_interaction)
+                        VALUES (%s, %s, %s, %s, 'standard', 'neutral', %s, %s)
+                    """, (contact_id, name or email_clean.split("@")[0], email_clean, pw_hash, now, now))
+                    company_cust_id = None
 
             conn.commit()
         finally:
@@ -118,10 +119,12 @@ class AuthService:
         email_clean = email.strip().lower()
         conn = _get_db()
         try:
-            row = conn.execute(
-                "SELECT id, name, email, password_hash, company_customer_id FROM customers WHERE LOWER(email) = ?",
-                (email_clean,)
-            ).fetchone()
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, name, email, password_hash, company_customer_id FROM supportflow.customers WHERE LOWER(email) = LOWER(%s)",
+                    (email_clean,)
+                )
+                row = cur.fetchone()
 
             if not row or not row['password_hash']:
                 raise ValidationError("Invalid email or password.", details={"code": "INVALID_CREDENTIALS"})
@@ -158,7 +161,8 @@ class AuthService:
             return True
         conn = _get_db()
         try:
-            conn.execute("DELETE FROM customer_sessions WHERE session_token = ?", (token,))
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM supportflow.customer_sessions WHERE session_token = %s", (token,))
             conn.commit()
             return True
         except Exception:
@@ -171,12 +175,14 @@ class AuthService:
             return None
         conn = _get_db()
         try:
-            row = conn.execute("""
-                SELECT s.session_token, c.id, c.name, c.email, c.company_customer_id
-                FROM customer_sessions s
-                JOIN customers c ON s.customer_id = c.id
-                WHERE s.session_token = ?
-            """, (token,)).fetchone()
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT s.session_token, c.id, c.name, c.email, c.company_customer_id
+                    FROM supportflow.customer_sessions s
+                    JOIN supportflow.customers c ON s.customer_id = c.id
+                    WHERE s.session_token = %s
+                """, (token,))
+                row = cur.fetchone()
 
             if not row:
                 return None

@@ -51,16 +51,18 @@ def resolve_company_customer_id(state: AgentState) -> Tuple[Optional[str], Optio
     # Check SupportFlow DB for linked company_customer_id
     conn = _get_db()
     try:
-        row = conn.execute(
-            "SELECT email, company_customer_id FROM customers WHERE id = ?", (contact_id,)
-        ).fetchone()
-        if row:
-            if row['company_customer_id']:
-                return row['company_customer_id'], None
-            if row['email'] and "@" in row['email'] and not row['email'].endswith(".supportflow"):
-                comp_match = CompanyDataService().get_customer_by_email(row['email'])
-                if comp_match.get("found") and comp_match.get("customer"):
-                    return comp_match["customer"]["customer_id"], comp_match["customer"]["name"]
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT email, company_customer_id FROM supportflow.customers WHERE id = %s", (contact_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                if row['company_customer_id']:
+                    return row['company_customer_id'], None
+                if row['email'] and "@" in row['email'] and not row['email'].endswith(".supportflow"):
+                    comp_match = CompanyDataService().get_customer_by_email(row['email'])
+                    if comp_match.get("found") and comp_match.get("customer"):
+                        return comp_match["customer"]["customer_id"], comp_match["customer"]["name"]
     except Exception as e:
         logger.debug(f"DB lookup in resolve_company_customer_id failed: {e}")
     finally:
