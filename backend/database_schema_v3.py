@@ -21,6 +21,8 @@ def create_schema_v3():
             id TEXT PRIMARY KEY,
             name TEXT,
             email TEXT UNIQUE NOT NULL,
+            password_hash TEXT,
+            company_customer_id TEXT,
             tier TEXT DEFAULT 'standard',
             sentiment TEXT DEFAULT 'neutral',
             total_conversations INTEGER DEFAULT 0,
@@ -35,8 +37,30 @@ def create_schema_v3():
         )
     """)
 
+    # Migrations for existing database
+    try:
+        conn.execute("ALTER TABLE customers ADD COLUMN password_hash TEXT")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE customers ADD COLUMN company_customer_id TEXT")
+    except Exception:
+        pass
+
     conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_tier ON customers(tier)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_company_id ON customers(company_customer_id)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS customer_sessions (
+            session_token TEXT PRIMARY KEY,
+            customer_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_customer_sessions_token ON customer_sessions(session_token)")
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS contact_channels (

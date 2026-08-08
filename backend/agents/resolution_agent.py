@@ -14,8 +14,9 @@ llm = ChatGroq(
 
 RESOLUTION_PROMPT = """You are a helpful customer support agent for ShopEase, an e-commerce company.
 
-Use the provided context to answer the customer's question accurately and politely.
-If the context does not contain enough information, say you will escalate to a human agent.
+Use the provided context (company data and/or knowledge base) to answer the customer's question accurately and politely.
+If specific required information (such as an order ID or email address) is missing or ambiguous, politely ask the customer for clarification.
+If the context does not contain enough information and cannot be resolved, say you will escalate to a human agent.
 
 Keep responses concise, friendly, and professional.
 
@@ -28,9 +29,18 @@ Customer Intent: {intent}
 async def resolution_agent_node(state: AgentState) -> AgentState:
     logger.info("💬 RESOLUTION AGENT CALLED")
     message = state.get("customer_message")
-    context = state.get("retrieved_context", "No context available")
+    retrieved_context = state.get("retrieved_context", "")
+    company_data_context = state.get("company_data_context", "")
     intent = state.get("intent", "general_inquiry")
     chat_history = state.get("chat_history", [])
+
+    context_parts = []
+    if company_data_context:
+        context_parts.append(f"--- Company Business Data ---\n{company_data_context}")
+    if retrieved_context:
+        context_parts.append(f"--- Knowledge Base / Policies ---\n{retrieved_context}")
+
+    context = "\n\n".join(context_parts) if context_parts else "No specific context available."
 
     logger.info(f"🎯 Generating response for intent: {intent}")
 

@@ -33,6 +33,8 @@ class AgentState(TypedDict, total=False):
 
     customer_id: Optional[str]
     customer_context: Optional[dict]
+    company_customer: Optional[dict]
+    company_data_context: Optional[str]
 
     session_id: Optional[str]
     chat_history: Optional[list]

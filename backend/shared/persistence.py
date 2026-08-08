@@ -32,6 +32,21 @@ def _gen_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:12]}"
 
 
+def link_contact_company_customer(contact_id: str, company_customer_id: str) -> None:
+    conn = _get_db()
+    try:
+        conn.execute(
+            "UPDATE customers SET company_customer_id = ? WHERE id = ?",
+            (company_customer_id, contact_id)
+        )
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to link company customer {company_customer_id} to contact {contact_id}: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+
 def ensure_contact(contact_id: str, channel: str, name: Optional[str] = None) -> str:
     if not contact_id or contact_id == "anonymous":
         contact_id = f"anon_{channel}_{uuid4().hex[:6]}"
@@ -42,18 +57,23 @@ def ensure_contact(contact_id: str, channel: str, name: Optional[str] = None) ->
         email = f"{contact_id}@{channel}.supportflow"
 
     conn = _get_db()
+    company_cust_id = None
     try:
-        existing = conn.execute("SELECT id FROM customers WHERE id = ?", (contact_id,)).fetchone()
+        existing = conn.execute("SELECT id, email, company_customer_id FROM customers WHERE id = ?", (contact_id,)).fetchone()
 
         if existing:
+            contact_id = existing['id']
+            email = existing['email'] or email
+            company_cust_id = existing['company_customer_id']
             conn.execute(
                 "UPDATE customers SET last_interaction = ? WHERE id = ?",
                 (datetime.utcnow().isoformat(), contact_id)
             )
         else:
-            existing_email = conn.execute("SELECT id FROM customers WHERE email = ?", (email,)).fetchone()
+            existing_email = conn.execute("SELECT id, email, company_customer_id FROM customers WHERE email = ?", (email,)).fetchone()
             if existing_email:
                 contact_id = existing_email['id']
+                company_cust_id = existing_email['company_customer_id']
                 conn.execute(
                     "UPDATE customers SET last_interaction = ? WHERE id = ?",
                     (datetime.utcnow().isoformat(), contact_id)
@@ -77,6 +97,17 @@ def ensure_contact(contact_id: str, channel: str, name: Optional[str] = None) ->
         conn.rollback()
     finally:
         conn.close()
+
+    # Attempt exact email company DB lookup if company_customer_id not linked
+    if not company_cust_id and "@" in email and not email.endswith(".supportflow"):
+        try:
+            from company_data.service import CompanyDataService
+            comp_res = CompanyDataService().get_customer_by_email(email)
+            if comp_res.get("found") and comp_res.get("customer"):
+                matched_id = comp_res["customer"]["customer_id"]
+                link_contact_company_customer(contact_id, matched_id)
+        except Exception as ex:
+            logger.debug(f"Company customer lookup during ensure_contact skipped: {ex}")
 
     return contact_id
 

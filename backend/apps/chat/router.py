@@ -9,6 +9,7 @@ from agents.resolution_agent import resolution_agent_node
 from agents.escalation_agent import escalation_agent_node
 from agents.customer_intelligence_agent import customer_intelligence_agent_node
 from agents.priority_agent import priority_agent_node
+from agents.company_data_agent import company_data_agent_node
 from langgraph.graph import StateGraph, START, END
 from shared.persistence import (
     ensure_contact,
@@ -58,6 +59,7 @@ graph = StateGraph(AgentState)
 graph.add_node("intent_agent", intent_agent_node)
 graph.add_node("customer_intelligence_agent", customer_intelligence_agent_node)
 graph.add_node("priority_agent", priority_agent_node)
+graph.add_node("company_data_agent", company_data_agent_node)
 graph.add_node("knowledge_agent", knowledge_agent_node)
 graph.add_node("resolution_agent", resolution_agent_node)
 graph.add_node("escalation_agent", escalation_agent_node)
@@ -65,7 +67,8 @@ graph.add_node("escalation_agent", escalation_agent_node)
 graph.add_edge(START, "intent_agent")
 graph.add_edge("intent_agent", "customer_intelligence_agent")
 graph.add_edge("customer_intelligence_agent", "priority_agent")
-graph.add_conditional_edges("priority_agent", should_use_knowledge)
+graph.add_edge("priority_agent", "company_data_agent")
+graph.add_conditional_edges("company_data_agent", should_use_knowledge)
 graph.add_edge("knowledge_agent", "resolution_agent")
 graph.add_edge("resolution_agent", "escalation_agent")
 graph.add_edge("escalation_agent", END)
