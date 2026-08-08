@@ -314,21 +314,45 @@ CREATE TABLE IF NOT EXISTS supportflow.activity_logs (
 CREATE INDEX IF NOT EXISTS idx_sf_act_type ON supportflow.activity_logs(type);
 CREATE INDEX IF NOT EXISTS idx_sf_act_timestamp ON supportflow.activity_logs(timestamp DESC);
 
--- 3.10 supportflow.knowledge_documents
+-- 3.10 supportflow.knowledge_documents & supportflow.knowledge_chunks
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE TABLE IF NOT EXISTS supportflow.knowledge_documents (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    chunks INTEGER DEFAULT 0,
+    id VARCHAR(255) PRIMARY KEY,
+    title VARCHAR(500) NOT NULL,
+    type VARCHAR(50) NOT NULL DEFAULT 'uploaded',
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    chunks_count INTEGER DEFAULT 0,
     retrieval_count INTEGER DEFAULT 0,
-    last_updated TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    size_bytes BIGINT,
-    file_path TEXT,
-    chroma_collection TEXT
+    size_bytes BIGINT DEFAULT 0,
+    file_path VARCHAR(1000),
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_sf_know_status ON supportflow.knowledge_documents(status);
+CREATE INDEX IF NOT EXISTS idx_sf_know_doc_status ON supportflow.knowledge_documents(status);
+CREATE INDEX IF NOT EXISTS idx_sf_know_doc_type ON supportflow.knowledge_documents(type);
+
+CREATE TABLE IF NOT EXISTS supportflow.knowledge_chunks (
+    id VARCHAR(255) PRIMARY KEY,
+    document_id VARCHAR(255) NOT NULL REFERENCES supportflow.knowledge_documents(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    token_count INTEGER,
+    embedding VECTOR(384) NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_doc_chunk_index UNIQUE (document_id, chunk_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sf_know_chunk_doc_id ON supportflow.knowledge_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_sf_know_chunk_metadata ON supportflow.knowledge_chunks USING gin (metadata);
+
+CREATE INDEX IF NOT EXISTS idx_sf_know_chunk_embedding_hnsw
+ON supportflow.knowledge_chunks
+USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
 
 -- 3.11 supportflow.email_tickets
 CREATE TABLE IF NOT EXISTS supportflow.email_tickets (

@@ -19,7 +19,7 @@ class BaseRepository:
         try:
             conn = get_postgres_connection()
             with conn.cursor() as cur:
-                cur.execute("SET search_path TO supportflow, public;")
+                cur.execute("SET search_path TO supportflow, extensions, public;")
             yield conn
             conn.commit()
         except Exception as e:

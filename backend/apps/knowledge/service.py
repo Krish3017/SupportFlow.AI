@@ -19,27 +19,21 @@ from core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "chroma_db")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+
 
 class KnowledgeService:
 
     def __init__(self):
         self.repository = KnowledgeRepository()
-        self._vectorstore = None
+        self._embeddings = None
 
     @property
-    def vectorstore(self):
-        if self._vectorstore is None:
+    def embeddings(self):
+        if self._embeddings is None:
             from langchain_huggingface import HuggingFaceEmbeddings
-            from langchain_chroma import Chroma
-
-            embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-            self._vectorstore = Chroma(
-                persist_directory=CHROMA_DB_PATH,
-                embedding_function=embeddings
-            )
-        return self._vectorstore
+            self._embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+        return self._embeddings
 
     def list_documents(
         self,
@@ -72,8 +66,6 @@ class KnowledgeService:
 
     def get_document_detail(self, document_id: str) -> DocumentDetailResponse:
         doc_data = self.repository.get_document(document_id)
-
-        # Get chunks from ChromaDB
         chunks = self._get_chunks_for_document(document_id)
 
         response = DocumentDetailResponse(
@@ -83,7 +75,7 @@ class KnowledgeService:
             status=DocumentStatus(doc_data['status']),
             chunks=doc_data['chunks'],
             retrieval_count=doc_data['retrieval_count'],
-            last_updated=doc_data['last_updated'],
+            last_updated=str(doc_data['last_updated']),
             size=self._format_size(doc_data.get('size_bytes', 0)),
             file_path=doc_data.get('file_path'),
             chunk_list=chunks
@@ -96,69 +88,67 @@ class KnowledgeService:
         return self._get_chunks_for_document(document_id)
 
     def search_knowledge(self, query: str, k: int = 5) -> SearchResultResponse:
-        docs_with_scores = self.vectorstore.similarity_search_with_score(query, k=k)
+        query_vec = self.embeddings.embed_query(query)
+        hits = self.repository.vector_similarity_search(query_vec, top_k=k)
 
         results = [
             SearchHitResponse(
-                chunk_content=doc.page_content,
-                similarity_score=round(1 - score, 4),  # Convert distance to similarity
-                source_document=doc.metadata.get('source', 'Unknown')
+                chunk_content=h['content'],
+                similarity_score=round(float(h['similarity_score']), 4),
+                source_document=h['document_title']
             )
-            for doc, score in docs_with_scores
+            for h in hits
         ]
 
         return SearchResultResponse(query=query, results=results)
 
     def upload_document(self, title: str, content: str, doc_type: str) -> UploadResponse:
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
-        from langchain.schema import Document
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        from langchain_core.documents import Document
 
         doc_id = str(uuid.uuid4())
 
-        # Chunk the content
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-        documents = [Document(page_content=content, metadata={"source": title, "doc_id": doc_id})]
-        chunks = splitter.split_documents(documents)
+        self.repository.create_document({
+            'id': doc_id,
+            'title': title,
+            'type': doc_type,
+            'status': 'pending',
+            'chunks': 0,
+            'retrieval_count': 0,
+            'last_updated': datetime.utcnow().isoformat(),
+            'size_bytes': len(content.encode('utf-8')),
+            'metadata': {'source': title, 'doc_id': doc_id}
+        })
 
-        # Add to vectorstore
         try:
-            self.vectorstore.add_documents(chunks)
+            splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+            docs = [Document(page_content=content, metadata={"source": title, "doc_id": doc_id})]
+            split_chunks = splitter.split_documents(docs)
 
-            # Save metadata to DB
-            self.repository.create_document({
-                'id': doc_id,
-                'title': title,
-                'type': doc_type,
-                'status': 'indexed',
-                'chunks': len(chunks),
-                'retrieval_count': 0,
-                'last_updated': datetime.now().isoformat(),
-                'size_bytes': len(content.encode('utf-8')),
-                'chroma_collection': 'default'
-            })
+            chunks_data = []
+            for idx, ch in enumerate(split_chunks):
+                emb = self.embeddings.embed_query(ch.page_content)
+                chunks_data.append({
+                    'id': f"{doc_id}#chunk_{idx}",
+                    'content': ch.page_content,
+                    'embedding': emb,
+                    'metadata': {"source": title, "doc_id": doc_id, "chunk_index": idx}
+                })
 
-            logger.info(f"Uploaded document '{title}' with {len(chunks)} chunks")
+            self.repository.replace_document_chunks(doc_id, chunks_data)
+
+            logger.info(f"Uploaded document '{title}' with {len(chunks_data)} chunks to PostgreSQL pgvector")
 
             return UploadResponse(
                 id=doc_id,
                 title=title,
-                chunks_created=len(chunks),
+                chunks_created=len(chunks_data),
                 status=DocumentStatus.INDEXED
             )
 
         except Exception as e:
             logger.error(f"Failed to upload document: {e}")
-
-            self.repository.create_document({
-                'id': doc_id,
-                'title': title,
-                'type': doc_type,
-                'status': 'failed',
-                'chunks': 0,
-                'retrieval_count': 0,
-                'last_updated': datetime.now().isoformat(),
-                'size_bytes': len(content.encode('utf-8')),
-            })
+            self.repository.update_document_status(doc_id, 'failed', 0)
 
             return UploadResponse(
                 id=doc_id,
@@ -176,26 +166,16 @@ class KnowledgeService:
         return StatisticsResponse(**stats)
 
     def _get_chunks_for_document(self, document_id: str) -> List[ChunkResponse]:
-        try:
-            collection = self.vectorstore._collection
-            results = collection.get(where={"doc_id": document_id})
-
-            if not results or not results.get('documents'):
-                return []
-
-            chunks = [
-                ChunkResponse(
-                    id=results['ids'][i],
-                    content=results['documents'][i],
-                    order=i,
-                    retrieval_count=0
-                )
-                for i in range(len(results['documents']))
-            ]
-            return chunks
-
-        except Exception:
-            return []
+        chunks_raw = self.repository.retrieve_document_chunks(document_id)
+        return [
+            ChunkResponse(
+                id=c['id'],
+                content=c['content'],
+                order=c['chunk_index'],
+                retrieval_count=0
+            )
+            for c in chunks_raw
+        ]
 
     def _to_response(self, data: dict) -> DocumentResponse:
         return DocumentResponse(
@@ -205,7 +185,7 @@ class KnowledgeService:
             status=DocumentStatus(data['status']),
             chunks=data['chunks'],
             retrieval_count=data['retrieval_count'],
-            last_updated=data['last_updated'],
+            last_updated=str(data['last_updated']),
             size=self._format_size(data.get('size_bytes', 0)),
             file_path=data.get('file_path')
         )

@@ -1,12 +1,10 @@
 from state.schema import AgentState
-from database import get_customer
+from shared.persistence import get_customer, link_contact_company_customer
 from company_data.service import CompanyDataService
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-from shared.persistence import link_contact_company_customer
 
 company_service = CompanyDataService()
 

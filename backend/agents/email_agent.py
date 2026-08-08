@@ -1,9 +1,10 @@
 import asyncio
 import logging
 import time
+import re
 from datetime import datetime
 
-from database import is_email_processed, save_email_ticket, update_email_ticket
+from apps.email.repository import EmailRepository
 from services.email_service import EmailService
 from gmail_reader import get_gmail_service, fetch_latest_emails
 from shared.persistence import (
@@ -17,6 +18,7 @@ from shared.persistence import (
     create_ticket_on_escalation,
     update_contact_stats,
     emit_activity,
+    get_conversation_messages,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,7 @@ class EmailAgent:
     def __init__(self, workflow):
         self.workflow = workflow
         self.email_service = EmailService()
+        self.email_repo = EmailRepository()
         self.gmail_service = None
         self.support_label_id = "INBOX"
         logger.info("Email Agent initialized.")
@@ -58,36 +61,51 @@ class EmailAgent:
         except Exception:
             return "INBOX"
 
+    def _extract_clean_email(self, sender_raw: str) -> str:
+        if not sender_raw:
+            return "anonymous@email.supportflow"
+        match = re.search(r'<([^>]+)>', sender_raw)
+        if match:
+            return match.group(1).strip().lower()
+        return sender_raw.strip().lower()
+
     async def _process_email(self, email: dict):
         ticket_id = None
         current_step = "initializing ticket"
         try:
-            logger.info("[EMAIL] Processing started")
+            logger.info(f"[EMAIL] Processing started for sender: {email.get('sender')}")
 
             current_step = "save_email_ticket"
-            ticket_id = save_email_ticket(email)
+            ticket_id = self.email_repo.save_email_ticket(email)
 
             start_time = time.time()
-            session_id = f"email_{email['id']}"
+            sender_clean = self._extract_clean_email(email.get("sender", ""))
+            session_id = f"email_{sender_clean}"
             message_content = f"Subject: {email['subject']}\n\n{email['body']}"
 
             current_step = "resolving sender"
-            contact_id = ensure_contact(email["sender"], "email")
-            logger.info("[EMAIL] Sender resolved")
+            contact_id = ensure_contact(sender_clean, "email")
+            logger.info(f"[EMAIL] Sender resolved to contact_id: {contact_id}")
 
             current_step = "resolving conversation"
             conversation_id = get_or_create_conversation(contact_id, "email", session_id)
             user_msg_id = store_user_message(conversation_id, message_content)
             execution_id = create_execution(user_msg_id, conversation_id)
-            logger.info("[EMAIL] Conversation resolved")
+            logger.info(f"[EMAIL] Conversation resolved: {conversation_id}")
+
+            # Link email_ticket to conversation
+            if ticket_id and conversation_id:
+                self.email_repo.link_conversation(ticket_id, conversation_id)
 
             current_step = "LangGraph execution"
             logger.info("[EMAIL] LangGraph execution started")
+            chat_history = get_conversation_messages(conversation_id)
+
             result = await self.workflow.ainvoke({
                 "customer_message": message_content,
                 "customer_id": contact_id,
                 "session_id": session_id,
-                "chat_history": [],
+                "chat_history": chat_history,
             })
             logger.info("[EMAIL] LangGraph execution completed")
 
@@ -110,7 +128,7 @@ class EmailAgent:
 
             emit_activity(
                 "conversation",
-                f"[EMAIL] {intent} from {email['sender']}",
+                f"[EMAIL] {intent} from {sender_clean}",
                 metadata={
                     "conversation_id": conversation_id,
                     "execution_id": execution_id,
@@ -119,24 +137,11 @@ class EmailAgent:
                 }
             )
 
-            # Link email_ticket to conversation
-            try:
-                from database import get_connection
-                conn = get_connection()
-                conn.execute(
-                    "UPDATE email_tickets SET conversation_id = ? WHERE id = ?",
-                    (conversation_id, ticket_id)
-                )
-                conn.commit()
-                conn.close()
-            except Exception:
-                pass
-
             current_step = "sending response"
             logger.info("[EMAIL] Sending response")
             if escalate:
                 self.email_service.send_escalation(
-                    to=email["sender"],
+                    to=sender_clean,
                     subject=email["subject"],
                     original_body=email["body"],
                     intent=intent,
@@ -144,21 +149,24 @@ class EmailAgent:
                     sentiment=sentiment,
                     ticket_id=ticket_id,
                 )
-                update_email_ticket(ticket_id, "escalated", final_response)
+                self.email_repo.update_status(ticket_id, "escalated", final_response)
             else:
                 self.email_service.send_resolution(
-                    to=email["sender"],
+                    to=sender_clean,
                     subject=email["subject"],
                     ai_response=final_response,
                 )
-                update_email_ticket(ticket_id, "resolved", final_response)
+                self.email_repo.update_status(ticket_id, "resolved", final_response)
 
             logger.info("[EMAIL] Response sent successfully")
 
         except Exception as e:
             logger.error(f"[EMAIL] FAILED at {current_step}: {e}")
             if ticket_id:
-                update_email_ticket(ticket_id, "error", str(e))
+                try:
+                    self.email_repo.update_status(ticket_id, "failed", str(e))
+                except Exception:
+                    pass
 
     async def _poll(self):
         try:
@@ -173,7 +181,7 @@ class EmailAgent:
             for email in emails:
                 msg_id = email["id"]
                 logger.info(f"[EMAIL] Checking message: {msg_id}")
-                if is_email_processed(msg_id):
+                if self.email_repo.is_email_processed(msg_id):
                     logger.info(f"[EMAIL] Skipping message: {msg_id} — reason: already processed in database")
                 else:
                     logger.info(f"[EMAIL] Processing message: {msg_id}")

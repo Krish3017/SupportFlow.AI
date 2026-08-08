@@ -21,11 +21,11 @@ AGENT_NAMES = {
 
 def _get_db() -> psycopg.Connection:
     """
-    Returns a PostgreSQL connection set to search_path supportflow, public.
+    Returns a PostgreSQL connection set to search_path supportflow, extensions, public.
     """
     conn = get_postgres_connection()
     with conn.cursor() as cur:
-        cur.execute("SET search_path TO supportflow, public;")
+        cur.execute("SET search_path TO supportflow, extensions, public;")
     conn.commit()
     return conn
 
@@ -96,7 +96,7 @@ def ensure_contact(contact_id: str, channel: str, name: Optional[str] = None) ->
             cur.execute("""
                 INSERT INTO supportflow.contact_channels (contact_id, channel_type, channel_identifier, verified, created_at)
                 VALUES (%s, %s, %s, FALSE, %s)
-                ON CONFLICT (contact_id, channel_type) DO NOTHING
+                ON CONFLICT (channel_type, channel_identifier) DO NOTHING
             """, (contact_id, channel, channel_id, datetime.utcnow().isoformat()))
 
         conn.commit()
@@ -536,3 +536,16 @@ def persist_workflow_result(
     )
 
     return conversation_id
+
+
+def get_customer(customer_id: str) -> Optional[dict]:
+    if not customer_id:
+        return None
+    conn = _get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM supportflow.customers WHERE id = %s", (customer_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+    finally:
+        conn.close()

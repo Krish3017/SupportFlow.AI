@@ -5,8 +5,6 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database import create_tables
-from agents.email_agent import EmailAgent
 from core.config import settings, validate_required_settings
 from core.logging_config import setup_logging, get_logger
 
@@ -24,7 +22,6 @@ from apps.auth import router as auth_router
 setup_logging(level=settings.LOG_LEVEL)
 logger = get_logger(__name__)
 
-create_tables()
 validate_required_settings()
 
 app = FastAPI(
