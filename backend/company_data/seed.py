@@ -8,10 +8,12 @@ logger = logging.getLogger(__name__)
 def seed_company_database() -> None:
     """
     Deterministically seeds 22 realistic synthetic customers and related business data.
-    Uses INSERT OR REPLACE to ensure idempotency.
+    Temporarily disables foreign key checks during re-seeding to allow INSERT OR REPLACE.
     """
     conn = get_company_db_connection()
     try:
+        # Disable FK checks temporarily for seeding replaces
+        conn.execute("PRAGMA foreign_keys=OFF")
         create_company_schema(conn)
         cursor = conn.cursor()
 
@@ -63,6 +65,7 @@ def seed_company_database() -> None:
             ("CUST-1020", "Tina Lewis", "tina.lewis@example.com", "+1-555-0120", "Gold", "active", "2023-12-15T11:25:00Z", 3, 499.97, "email", "2023-12-15T11:25:00Z", now),
             ("CUST-1021", "Victor Lee", "victor.lee@example.com", "+1-555-0121", "Bronze", "active", "2024-05-20T14:30:00Z", 1, 79.99, "telegram", "2024-05-20T14:30:00Z", now),
             ("CUST-1022", "Wendy Walker", "wendy.walker@example.com", "+1-555-0122", "Silver", "active", "2024-01-30T10:00:00Z", 2, 389.98, "email", "2024-01-30T10:00:00Z", now),
+            ("CUST-1023", "Krish Ramanandi", "krishramanandi30@gmail.com", "+1-555-0123", "VIP", "active", "2024-01-01T10:00:00Z", 2, 849.98, "email", "2024-01-01T10:00:00Z", now),
         ]
 
         cursor.executemany("""
@@ -95,6 +98,7 @@ def seed_company_database() -> None:
             ("ADDR-1020", "CUST-1020", "shipping", "555 Walnut Place", "Charlotte", "NC", "28202", "USA", 1, "2023-12-15T11:25:00Z", now),
             ("ADDR-1021", "CUST-1021", "shipping", "556 Walnut Place", "Charlotte", "NC", "28202", "USA", 1, "2024-05-20T14:30:00Z", now),
             ("ADDR-1022", "CUST-1022", "shipping", "557 Walnut Place", "Charlotte", "NC", "28202", "USA", 1, "2024-01-30T10:00:00Z", now),
+            ("ADDR-1023", "CUST-1023", "shipping", "789 High Street", "San Jose", "CA", "95112", "USA", 1, "2024-01-01T10:00:00Z", now),
         ]
 
         cursor.executemany("""
@@ -125,6 +129,8 @@ def seed_company_database() -> None:
             ("ORD-1018", "CUST-1016", "2026-08-01T14:10:00Z", "shipped", 109.99, "USD", "ADDR-1016", "2026-08-07", None, "DHL66554433", "2026-08-01T14:10:00Z", now),
             ("ORD-1019", "CUST-1018", "2026-08-06T16:00:00Z", "processing", 599.99, "USD", "ADDR-1018", "2026-08-13", None, "TBD", "2026-08-06T16:00:00Z", now),
             ("ORD-1020", "CUST-1020", "2026-07-30T10:00:00Z", "delivered", 249.99, "USD", "ADDR-1020", "2026-08-04", "2026-08-04", "USPS990011", "2026-07-30T10:00:00Z", now),
+            ("ORD-1021", "CUST-1023", "2026-08-04T12:00:00Z", "shipped", 249.99, "USD", "ADDR-1023", "2026-08-09", None, "FX10219988", "2026-08-04T12:00:00Z", now),
+            ("ORD-1022", "CUST-1023", "2026-07-20T15:30:00Z", "delivered", 599.99, "USD", "ADDR-1023", "2026-07-25", "2026-07-24", "UPS99887711", "2026-07-20T15:30:00Z", now),
         ]
 
         cursor.executemany("""
@@ -150,6 +156,8 @@ def seed_company_database() -> None:
             ("ITEM-1013", "ORD-1016", "PROD-104", 1, 599.99, 599.99),
             ("ITEM-1014", "ORD-1018", "PROD-107", 1, 109.99, 109.99),
             ("ITEM-1015", "ORD-1020", "PROD-101", 1, 249.99, 249.99),
+            ("ITEM-1016", "ORD-1021", "PROD-101", 1, 249.99, 249.99),
+            ("ITEM-1017", "ORD-1022", "PROD-104", 1, 599.99, 599.99),
         ]
 
         cursor.executemany("""
@@ -176,6 +184,8 @@ def seed_company_database() -> None:
             ("PAY-1014", "ORD-1016", "CUST-1013", 599.99, "credit_card", "successful", "TXN-1016443", "2026-08-05T12:31:00Z"),
             ("PAY-1015", "ORD-1018", "CUST-1016", 109.99, "paypal", "successful", "TXN-1018221", "2026-08-01T14:11:00Z"),
             ("PAY-1016", "ORD-1020", "CUST-1020", 249.99, "credit_card", "successful", "TXN-1020009", "2026-07-30T10:01:00Z"),
+            ("PAY-1017", "ORD-1021", "CUST-1023", 249.99, "credit_card", "successful", "TXN-1021001", "2026-08-04T12:01:00Z"),
+            ("PAY-1018", "ORD-1022", "CUST-1023", 599.99, "credit_card", "successful", "TXN-1022002", "2026-07-20T15:31:00Z"),
         ]
 
         cursor.executemany("""
@@ -196,6 +206,8 @@ def seed_company_database() -> None:
             ("SHIP-1008", "ORD-1015", "FedEx", "FX44332211", "out_for_delivery", "2026-08-03T08:00:00Z", "2026-08-08", None),
             ("SHIP-1009", "ORD-1018", "DHL", "DHL66554433", "in_transit", "2026-08-02T10:00:00Z", "2026-08-07", None),
             ("SHIP-1010", "ORD-1020", "USPS", "USPS990011", "delivered", "2026-07-31T09:00:00Z", "2026-08-04", "2026-08-04T15:30:00Z"),
+            ("SHIP-1011", "ORD-1021", "FedEx", "FX10219988", "in_transit", "2026-08-05T09:00:00Z", "2026-08-09", None),
+            ("SHIP-1012", "ORD-1022", "UPS", "UPS99887711", "delivered", "2026-07-21T10:00:00Z", "2026-07-25", "2026-07-24T14:00:00Z"),
         ]
 
         cursor.executemany("""
@@ -215,6 +227,7 @@ def seed_company_database() -> None:
             ("SUB-1007", "CUST-1013", "Enterprise Support Plan", "active", "annual", "2023-10-01", "2026-10-01", 299.99),
             ("SUB-1008", "CUST-1018", "VIP Priority Plan", "active", "monthly", "2023-08-01", "2026-09-01", 49.99),
             ("SUB-1009", "CUST-1020", "Pro Care Plan", "paused", "monthly", "2024-01-01", "2026-08-15", 29.99),
+            ("SUB-1010", "CUST-1023", "Enterprise Support Plan", "active", "annual", "2024-01-01", "2027-01-01", 299.99),
         ]
 
         cursor.executemany("""
@@ -224,13 +237,42 @@ def seed_company_database() -> None:
         """, subscriptions)
 
         conn.commit()
-        logger.info("Company business database seeded successfully with 22 synthetic customers.")
+        # Re-enable FK checks
+        conn.execute("PRAGMA foreign_keys=ON")
+        logger.info("Company business database seeded successfully with 23 synthetic customers.")
     except Exception as e:
         conn.rollback()
         logger.error(f"Failed to seed company database: {e}")
         raise
     finally:
         conn.close()
+
+    # Seed SupportFlow customer user account for login (email: krishramanandi30@gmail.com, pass: 12345678)
+    try:
+        from apps.auth.service import AuthService, hash_password
+        from shared.persistence import _get_db
+        conn_sf = _get_db()
+        try:
+            email_clean = "krishramanandi30@gmail.com"
+            pw_hash = hash_password("12345678")
+            existing = conn_sf.execute("SELECT id FROM customers WHERE LOWER(email) = ?", (email_clean,)).fetchone()
+            if existing:
+                conn_sf.execute(
+                    "UPDATE customers SET password_hash = ?, company_customer_id = 'CUST-1023', name = 'Krish Ramanandi' WHERE id = ?",
+                    (pw_hash, existing['id'])
+                )
+            else:
+                now_iso = "2026-08-08T10:00:00Z"
+                conn_sf.execute("""
+                    INSERT INTO customers (id, name, email, password_hash, company_customer_id, tier, sentiment, joined_date, last_interaction)
+                    VALUES ('cust_krish123', 'Krish Ramanandi', ?, ?, 'CUST-1023', 'vip', 'positive', ?, ?)
+                """, (email_clean, pw_hash, now_iso, now_iso))
+            conn_sf.commit()
+            logger.info("SupportFlow user account ready: krishramanandi30@gmail.com (pass: 12345678, linked: CUST-1023)")
+        finally:
+            conn_sf.close()
+    except Exception as ex:
+        logger.error(f"User account setup failed: {ex}")
 
 
 if __name__ == "__main__":

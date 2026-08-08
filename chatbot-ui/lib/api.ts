@@ -41,13 +41,19 @@ export async function sendChatMessage(
   message: string,
   sessionId: string,
   customerId: string,
-  onChunk: (content: string) => void
+  onChunk: (content: string) => void,
+  token?: string
 ): Promise<{ session_id: string | null; conversation_id: string | null }> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/chat`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       message,
       session_id: sessionId,
@@ -142,5 +148,62 @@ export async function fetchSessionConversation(sessionId: string): Promise<Sessi
     return await response.json();
   } catch {
     return { conversation_id: null, status: null };
+  }
+}
+
+export interface AuthUser {
+  id: string;
+  email: str;
+  name?: string;
+  company_customer_id?: string;
+}
+
+export async function registerCustomer(email: string, password: string, name?: string): Promise<{ token: string; user: AuthUser }> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, name }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || data.detail || 'Registration failed.');
+  }
+  return data.data;
+}
+
+export async function loginCustomer(email: string, password: string): Promise<{ token: string; user: AuthUser }> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || data.detail || 'Login failed.');
+  }
+  return data.data;
+}
+
+export async function logoutCustomer(token?: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE_URL}/api/auth/logout`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch (e) {
+    console.error('Logout error:', e);
+  }
+}
+
+export async function getAuthenticatedCustomer(token: string): Promise<AuthUser | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.data;
+  } catch {
+    return null;
   }
 }

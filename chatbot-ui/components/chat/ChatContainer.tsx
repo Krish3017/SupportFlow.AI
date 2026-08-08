@@ -4,19 +4,26 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTheme } from 'next-themes';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Message } from '@/types/chat';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
-import { Moon, Sun, Loader2 } from 'lucide-react';
+import { Moon, Sun, Loader2, UserCheck, LogOut, User } from 'lucide-react';
 import {
   sendChatMessage,
   fetchConversationHistory,
   fetchSessionConversation,
+  registerCustomer,
+  loginCustomer,
+  logoutCustomer,
+  getAuthenticatedCustomer,
+  AuthUser,
 } from '@/lib/api';
 
 const STORAGE_KEYS = {
   SESSION_ID: 'supportflow_session_id',
   CONVERSATION_ID: 'supportflow_conversation_id',
+  AUTH_TOKEN: 'supportflow_auth_token',
 } as const;
 
 function getStoredSessionId(): string {
@@ -47,12 +54,34 @@ export function ChatContainer() {
   const conversationIdRef = useRef<string | null>(null);
   const restoredRef = useRef(false);
 
+  // Auth States
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authToken, setAuthToken] = useState<string>('');
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [nameInput, setNameInput] = useState('');
+  const [authError, setAuthError] = useState('');
+
   const restoreSession = useCallback(async () => {
     if (restoredRef.current) return;
     restoredRef.current = true;
 
     const sessionId = getStoredSessionId();
     sessionIdRef.current = sessionId;
+
+    // Check stored auth token
+    const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+    if (token) {
+      setAuthToken(token);
+      const user = await getAuthenticatedCustomer(token);
+      if (user) {
+        setAuthUser(user);
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+      }
+    }
 
     const storedConvId = getStoredConversationId();
 
@@ -95,6 +124,37 @@ export function ChatContainer() {
     restoreSession();
   }, [restoreSession]);
 
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      if (authMode === 'register') {
+        const res = await registerCustomer(emailInput, passwordInput, nameInput);
+        setAuthToken(res.token);
+        setAuthUser(res.user);
+        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, res.token);
+      } else {
+        const res = await loginCustomer(emailInput, passwordInput);
+        setAuthToken(res.token);
+        setAuthUser(res.user);
+        localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, res.token);
+      }
+      setShowAuthModal(false);
+      setEmailInput('');
+      setPasswordInput('');
+      setNameInput('');
+    } catch (err: any) {
+      setAuthError(err.message || 'Authentication failed.');
+    }
+  };
+
+  const handleLogout = async () => {
+    await logoutCustomer(authToken);
+    localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+    setAuthToken('');
+    setAuthUser(null);
+  };
+
   const handleSendMessage = async (content: string) => {
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -116,11 +176,13 @@ export function ChatContainer() {
 
     setMessages((prev) => [...prev, assistantMessage]);
 
+    const activeCustomerId = authUser ? authUser.email : 'anonymous';
+
     try {
       const result = await sendChatMessage(
         content,
         sessionIdRef.current,
-        'C001',
+        activeCustomerId,
         (chunk) => {
           setMessages((prev) =>
             prev.map((msg) =>
@@ -129,7 +191,8 @@ export function ChatContainer() {
                 : msg
             )
           );
-        }
+        },
+        authToken
       );
 
       if (result.session_id) {
@@ -160,26 +223,134 @@ export function ChatContainer() {
   };
 
   return (
-    <Card className="w-full max-w-4xl h-[600px] flex flex-col shadow-lg">
+    <Card className="w-full max-w-4xl h-[650px] flex flex-col shadow-lg relative">
+      {/* Header */}
       <div className="px-6 py-4 border-b bg-muted/40 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Customer Support</h2>
-          <p className="text-sm text-muted-foreground">
-            AI-powered assistance
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            SupportFlow AI
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {authUser ? (
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                Logged in as {authUser.name || authUser.email}
+              </span>
+            ) : (
+              <span>Guest Session (Login to view account data)</span>
+            )}
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="ml-4"
-        >
-          <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">Toggle theme</span>
-        </Button>
+
+        <div className="flex items-center gap-2">
+          {authUser ? (
+            <Button variant="outline" size="sm" onClick={handleLogout} className="flex items-center gap-1">
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
+          ) : (
+            <Button variant="default" size="sm" onClick={() => setShowAuthModal(true)} className="flex items-center gap-1">
+              <User className="h-4 w-4" />
+              Sign In
+            </Button>
+          )}
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          >
+            <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+        </div>
       </div>
 
+      {/* Auth Modal Overlay */}
+      {showAuthModal && (
+        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-6 shadow-2xl bg-card border">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">
+                {authMode === 'login' ? 'Customer Login' : 'Create Customer Account'}
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowAuthModal(false)}>✕</Button>
+            </div>
+
+            {authError && (
+              <div className="mb-4 p-2 text-xs bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 rounded">
+                {authError}
+              </div>
+            )}
+
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              {authMode === 'register' && (
+                <div>
+                  <label className="text-xs font-medium block mb-1">Full Name</label>
+                  <Input
+                    type="text"
+                    placeholder="Alice Johnson"
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-medium block mb-1">Email Address</label>
+                <Input
+                  type="email"
+                  required
+                  placeholder="alice.johnson@example.com"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium block mb-1">Password</label>
+                <Input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                />
+              </div>
+
+              <Button type="submit" className="w-full">
+                {authMode === 'login' ? 'Sign In' : 'Register Account'}
+              </Button>
+            </form>
+
+            <div className="mt-4 text-center text-xs">
+              {authMode === 'login' ? (
+                <span>
+                  Don't have an account?{' '}
+                  <button
+                    className="text-primary underline font-medium"
+                    onClick={() => { setAuthMode('register'); setAuthError(''); }}
+                  >
+                    Register
+                  </button>
+                </span>
+              ) : (
+                <span>
+                  Already have an account?{' '}
+                  <button
+                    className="text-primary underline font-medium"
+                    onClick={() => { setAuthMode('login'); setAuthError(''); }}
+                  >
+                    Sign In
+                  </button>
+                </span>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Chat Messages */}
       <div className="flex-1 overflow-hidden">
         {isRestoring ? (
           <div className="h-full flex items-center justify-center">

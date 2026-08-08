@@ -5,6 +5,10 @@ from enum import Enum
 
 class CustomerTier(str, Enum):
     VIP = "vip"
+    PLATINUM = "platinum"
+    GOLD = "gold"
+    SILVER = "silver"
+    BRONZE = "bronze"
     STANDARD = "standard"
     NEW = "new"
 

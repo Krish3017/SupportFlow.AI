@@ -19,6 +19,7 @@ from apps.knowledge import router as knowledge_router
 from apps.analytics import router as analytics_router
 from apps.activity import router as activity_router
 from apps.email import router as email_router
+from apps.auth import router as auth_router
 
 setup_logging(level=settings.LOG_LEVEL)
 logger = get_logger(__name__)
@@ -40,6 +41,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(tickets_router)
 app.include_router(conversations_router)

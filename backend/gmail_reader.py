@@ -20,10 +20,18 @@ import os
 import base64
 import json
 from email import message_from_bytes
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
+try:
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google.auth.transport.requests import Request
+    from googleapiclient.discovery import build
+    GOOGLE_AUTH_AVAILABLE = True
+except ImportError:
+    GOOGLE_AUTH_AVAILABLE = False
+    Credentials = None
+    InstalledAppFlow = None
+    Request = None
+    build = None
 
 
 # ─── Scopes ────────────────────────────────────────────────────────────────────
@@ -47,6 +55,8 @@ def get_gmail_service():
     First run:  Opens browser → you log in → token.json is saved.
     Later runs: Reads token.json directly (no browser needed).
     """
+    if not GOOGLE_AUTH_AVAILABLE:
+        return None
     creds = None
 
     # Load existing token if available

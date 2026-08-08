@@ -50,11 +50,53 @@ async def process_through_workflow(
     session_id: str
 ) -> str:
     import time
+    import re
+    from shared.persistence import _get_db, link_contact_company_customer
+    from company_data.service import CompanyDataService
 
     try:
         start_time = time.time()
 
         contact_id = ensure_contact(user_id, "telegram")
+
+        # Check if Telegram contact is linked to a company_customer_id
+        conn = _get_db()
+        comp_cust_id = None
+        try:
+            row = conn.execute("SELECT company_customer_id, email FROM customers WHERE id = ?", (contact_id,)).fetchone()
+            if row:
+                comp_cust_id = row['company_customer_id']
+        finally:
+            conn.close()
+
+        # Check if message is an email address to link identity
+        emails = re.findall(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", message)
+        if not comp_cust_id and emails:
+            candidate_email = emails[0].strip().lower()
+            comp_res = CompanyDataService().get_customer_by_email(candidate_email)
+            if comp_res.get("found") and comp_res.get("customer"):
+                matched_cust = comp_res["customer"]
+                comp_cust_id = matched_cust["customer_id"]
+                link_contact_company_customer(contact_id, comp_cust_id)
+                # Try updating contact email in SupportFlow DB (ignore if duplicate email)
+                conn = _get_db()
+                try:
+                    conn.execute("UPDATE customers SET email = ? WHERE id = ?", (candidate_email, contact_id))
+                    conn.commit()
+                except Exception as ex_db:
+                    logger.debug(f"Could not update contact email to {candidate_email}: {ex_db}")
+                finally:
+                    conn.close()
+                return f"Thank you, {matched_cust.get('name')}! Your account ({candidate_email}) has been linked successfully. How can I help you today?"
+            else:
+                return f"No customer account found matching '{candidate_email}'. You can still ask general support questions."
+
+        # If unlinked and asking account-specific question, prompt for email
+        msg_lower = message.lower()
+        account_keywords = ["order", "shipment", "tracking", "payment", "subscription", "status", "my account"]
+        if not comp_cust_id and any(kw in msg_lower for kw in account_keywords) and not is_policy_or_faq(msg_lower):
+            return "To help with account-specific information, please provide the email associated with your account."
+
         conversation_id = get_or_create_conversation(contact_id, "telegram", session_id)
         chat_history = get_conversation_messages(conversation_id)
 
@@ -99,6 +141,11 @@ async def process_through_workflow(
     except Exception as e:
         logger.exception(f"Workflow error: {str(e)}")
         return "Sorry, an internal error occurred. Please try again."
+
+
+def is_policy_or_faq(msg: str) -> bool:
+    policy_kws = ["refund policy", "return policy", "shipping policy", "privacy policy", "terms of service", "what is your refund"]
+    return any(kw in msg for kw in policy_kws)
 
 
 # ============================================================================

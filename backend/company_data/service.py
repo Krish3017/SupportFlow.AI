@@ -5,7 +5,7 @@ from company_data.repository import CompanyRepository
 class CompanyDataService:
     """
     Company Data Service Layer.
-    Encapsulates business operations and combines domain entities from the company DB.
+    Encapsulates business operations and enforces strict customer-scoped data access security.
     """
 
     def __init__(self, repo: Optional[CompanyRepository] = None):
@@ -52,12 +52,20 @@ class CompanyDataService:
         customer_data["addresses"] = addresses
         return {"found": True, "customer": customer_data}
 
-    def get_customer_orders(self, customer_id_or_email: str, limit: int = 5) -> Dict[str, Any]:
-        customer = self.find_customer(customer_id_or_email)
-        if not customer:
-            return {"found": False, "message": f"Customer '{customer_id_or_email}' not found."}
+    # =========================================================================
+    # AUTHORIZED / SCOPED DATA ACCESS METHODS
+    # All methods require company_customer_id of the authenticated user
+    # =========================================================================
 
-        orders = self.repo.get_customer_orders(customer["customer_id"], limit=limit)
+    def get_customer_orders_scoped(self, company_customer_id: str, limit: int = 5) -> Dict[str, Any]:
+        if not company_customer_id:
+            return {"found": False, "message": "Identity unresolved. Please log in or provide registered email."}
+
+        customer = self.repo.get_customer_by_id(company_customer_id)
+        if not customer:
+            return {"found": False, "message": f"Customer '{company_customer_id}' not found."}
+
+        orders = self.repo.get_customer_orders(company_customer_id, limit=limit)
         enriched_orders = []
         for o in orders:
             order_info = dict(o)
@@ -73,12 +81,15 @@ class CompanyDataService:
             "orders": enriched_orders,
         }
 
-    def get_order_details(self, order_id: str) -> Dict[str, Any]:
-        order = self.repo.get_order_by_id(order_id)
-        if not order:
-            return {"found": False, "message": f"Order '{order_id}' not found."}
+    def get_order_details_scoped(self, order_id: str, company_customer_id: str) -> Dict[str, Any]:
+        if not company_customer_id:
+            return {"found": False, "message": "Identity unresolved. Cannot verify order ownership."}
 
-        customer = self.repo.get_customer_by_id(order["customer_id"])
+        order = self.repo.get_order_by_id(order_id)
+        if not order or order["customer_id"] != company_customer_id:
+            return {"found": False, "message": f"Order '{order_id}' was not found for your account."}
+
+        customer = self.repo.get_customer_by_id(company_customer_id)
         items = self.repo.get_order_items(order["order_id"])
         payment = self.repo.get_payment_by_order_id(order["order_id"])
         shipment = self.repo.get_shipment_by_order_id(order["order_id"])
@@ -96,10 +107,13 @@ class CompanyDataService:
             "shipping_address": shipping_address,
         }
 
-    def get_order_status(self, order_id: str) -> Dict[str, Any]:
+    def get_order_status_scoped(self, order_id: str, company_customer_id: str) -> Dict[str, Any]:
+        if not company_customer_id:
+            return {"found": False, "message": "Identity unresolved. Cannot verify order ownership."}
+
         order = self.repo.get_order_by_id(order_id)
-        if not order:
-            return {"found": False, "message": f"Order '{order_id}' not found."}
+        if not order or order["customer_id"] != company_customer_id:
+            return {"found": False, "message": f"Order '{order_id}' was not found for your account."}
 
         shipment = self.repo.get_shipment_by_order_id(order["order_id"])
         return {
@@ -117,19 +131,25 @@ class CompanyDataService:
             "tracking_number": shipment["tracking_number"] if shipment else None,
         }
 
-    def get_shipment_status(self, order_id_or_tracking: str) -> Dict[str, Any]:
+    def get_shipment_status_scoped(self, order_id_or_tracking: str, company_customer_id: str) -> Dict[str, Any]:
+        if not company_customer_id:
+            return {"found": False, "message": "Identity unresolved."}
+
         shipment = None
         if order_id_or_tracking.upper().startswith("ORD-"):
             shipment = self.repo.get_shipment_by_order_id(order_id_or_tracking)
         else:
             shipment = self.repo.get_shipment_by_tracking(order_id_or_tracking)
-            if not shipment and not order_id_or_tracking.upper().startswith("ORD-"):
+            if not shipment:
                 shipment = self.repo.get_shipment_by_order_id(order_id_or_tracking)
 
         if not shipment:
             return {"found": False, "message": f"No shipment record found for '{order_id_or_tracking}'."}
 
         order = self.repo.get_order_by_id(shipment["order_id"])
+        if not order or order["customer_id"] != company_customer_id:
+            return {"found": False, "message": f"No shipment record found for your account matching '{order_id_or_tracking}'."}
+
         return {
             "found": True,
             "shipment_id": shipment["shipment_id"],
@@ -140,18 +160,21 @@ class CompanyDataService:
             "shipped_at": shipment["shipped_at"],
             "estimated_delivery": shipment["estimated_delivery"],
             "delivered_at": shipment["delivered_at"],
-            "order_status": order["status"] if order else None,
+            "order_status": order["status"],
         }
 
-    def get_payment_status(self, order_id_or_payment_id: str) -> Dict[str, Any]:
+    def get_payment_status_scoped(self, order_id_or_payment_id: str, company_customer_id: str) -> Dict[str, Any]:
+        if not company_customer_id:
+            return {"found": False, "message": "Identity unresolved."}
+
         payment = None
         if order_id_or_payment_id.upper().startswith("PAY-"):
             payment = self.repo.get_payment_by_id(order_id_or_payment_id)
         else:
             payment = self.repo.get_payment_by_order_id(order_id_or_payment_id)
 
-        if not payment:
-            return {"found": False, "message": f"No payment record found for '{order_id_or_payment_id}'."}
+        if not payment or payment["customer_id"] != company_customer_id:
+            return {"found": False, "message": f"No payment record found for your account matching '{order_id_or_payment_id}'."}
 
         return {
             "found": True,
@@ -178,18 +201,21 @@ class CompanyDataService:
 
         return {"found": True, "product": product}
 
-    def get_customer_subscription(self, customer_id_or_email: str) -> Dict[str, Any]:
-        customer = self.find_customer(customer_id_or_email)
-        if not customer:
-            return {"found": False, "message": f"Customer '{customer_id_or_email}' not found."}
+    def get_customer_subscription_scoped(self, company_customer_id: str) -> Dict[str, Any]:
+        if not company_customer_id:
+            return {"found": False, "message": "Identity unresolved."}
 
-        sub = self.repo.get_subscription_by_customer_id(customer["customer_id"])
+        customer = self.repo.get_customer_by_id(company_customer_id)
+        if not customer:
+            return {"found": False, "message": f"Customer '{company_customer_id}' not found."}
+
+        sub = self.repo.get_subscription_by_customer_id(company_customer_id)
         if not sub:
             return {
                 "found": False,
                 "customer_id": customer["customer_id"],
                 "customer_name": customer["name"],
-                "message": "No active or past subscription found for this customer.",
+                "message": "No active or past subscription found for your account.",
             }
 
         return {

@@ -94,6 +94,16 @@ def setup_logging(level: str = "INFO", log_file: Optional[str] = None):
     # Set root level
     root.setLevel(getattr(logging, level.upper()))
 
+    # Ensure UTF-8 output on Windows streams
+    if sys.platform == "win32":
+        try:
+            if hasattr(sys.stdout, "reconfigure"):
+                sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            if hasattr(sys.stderr, "reconfigure"):
+                sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     # Console handler with colors
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)

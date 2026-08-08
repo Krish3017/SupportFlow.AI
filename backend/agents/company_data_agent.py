@@ -1,7 +1,8 @@
 import re
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from state.schema import AgentState
+from company_data.service import CompanyDataService
 from company_data.tools import (
     get_customer_by_email,
     get_customer_by_id,
@@ -13,14 +14,12 @@ from company_data.tools import (
     get_product_details,
     get_customer_subscription,
 )
+from shared.persistence import _get_db
 
 logger = logging.getLogger(__name__)
 
 
 def is_policy_or_faq_inquiry(message: str) -> bool:
-    """
-    Returns True if the message is a general policy/FAQ inquiry (which should use RAG/Knowledge base).
-    """
     msg = message.lower()
     policy_keywords = [
         "refund policy",
@@ -37,40 +36,61 @@ def is_policy_or_faq_inquiry(message: str) -> bool:
     return any(kw in msg for kw in policy_keywords)
 
 
+def resolve_company_customer_id(state: AgentState) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolves the company_customer_id and customer name for the active contact.
+    """
+    comp_cust = state.get("company_customer")
+    if comp_cust and comp_cust.get("customer_id"):
+        return comp_cust["customer_id"], comp_cust.get("name")
+
+    contact_id = state.get("customer_id")
+    if not contact_id or contact_id == "anonymous":
+        return None, None
+
+    # Check SupportFlow DB for linked company_customer_id
+    conn = _get_db()
+    try:
+        row = conn.execute(
+            "SELECT email, company_customer_id FROM customers WHERE id = ?", (contact_id,)
+        ).fetchone()
+        if row:
+            if row['company_customer_id']:
+                return row['company_customer_id'], None
+            if row['email'] and "@" in row['email'] and not row['email'].endswith(".supportflow"):
+                comp_match = CompanyDataService().get_customer_by_email(row['email'])
+                if comp_match.get("found") and comp_match.get("customer"):
+                    return comp_match["customer"]["customer_id"], comp_match["customer"]["name"]
+    except Exception as e:
+        logger.debug(f"DB lookup in resolve_company_customer_id failed: {e}")
+    finally:
+        conn.close()
+
+    # Direct email match fallback
+    if "@" in contact_id and not contact_id.endswith(".supportflow"):
+        comp_match = CompanyDataService().get_customer_by_email(contact_id)
+        if comp_match.get("found") and comp_match.get("customer"):
+            return comp_match["customer"]["customer_id"], comp_match["customer"]["name"]
+
+    return None, None
+
+
 async def company_data_agent_node(state: AgentState) -> AgentState:
-    """
-    Company Data Agent Node.
-    Determines whether company business data is needed, invokes controlled tools,
-    and attaches formatted company data context to the state.
-    """
     logger.info("[COMPANY_DATA] Agent node invoked")
     message = state.get("customer_message", "")
     intent = state.get("intent", "")
-    customer_id = state.get("customer_id", "")
-    company_customer = state.get("company_customer") or state.get("customer_context") or {}
 
     # Check if policy/FAQ inquiry -> skip company DB, let Knowledge Agent handle via RAG
     if is_policy_or_faq_inquiry(message):
         logger.info("[COMPANY_DATA] Policy/FAQ inquiry detected. Skipping company database search.")
         return {"company_data_context": None}
 
-    # Extract potential identifiers from message via regex
+    # Extract parameters from message
     order_ids = re.findall(r"\bORD-\d+\b", message, re.IGNORECASE)
-    customer_ids = re.findall(r"\bCUST-\d+\b", message, re.IGNORECASE)
     product_ids = re.findall(r"\bPROD-\d+\b", message, re.IGNORECASE)
     emails = re.findall(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", message)
 
-    target_email = emails[0] if emails else company_customer.get("email")
-    if not target_email and customer_id and "@" in customer_id:
-        target_email = customer_id
-
-    target_customer_id = customer_ids[0].upper() if customer_ids else company_customer.get("customer_id")
-    if not target_customer_id and customer_id and customer_id.upper().startswith("CUST-"):
-        target_customer_id = customer_id.upper()
-
-    customer_identifier = target_customer_id or target_email
-
-    # Determine if company business data is required based on intent and query
+    # Determine if company business data is required
     business_intents = {"order_status", "refund_request", "billing_issue", "account_issue", "product_question"}
     needs_company_data = (
         intent in business_intents
@@ -88,13 +108,47 @@ async def company_data_agent_node(state: AgentState) -> AgentState:
         logger.info("[COMPANY_DATA] Business data not required for this request.")
         return {"company_data_context": None}
 
+    # Public Product Query
+    if product_ids or (intent == "product_question" and not order_ids and "order" not in message.lower()):
+        query = product_ids[0] if product_ids else message
+        logger.info(f"[COMPANY_DATA] Fetching public product details for: {query}")
+        prod_res = get_product_details(query)
+        if prod_res.get("found"):
+            if "product" in prod_res:
+                p = prod_res["product"]
+                sec = (
+                    f"Product Record:\n"
+                    f"- Name: {p['product_name']}\n"
+                    f"- Category: {p['category']}\n"
+                    f"- Price: ${p['price']}\n"
+                    f"- Stock Status: {p['stock_status']}\n"
+                    f"- Description: {p['description']}"
+                )
+                return {"company_data_context": sec}
+            elif "products" in prod_res:
+                prods_summary = "\n".join([f"- {p['product_name']} (${p['price']}) - Status: {p['stock_status']}" for p in prod_res["products"]])
+                return {"company_data_context": f"Matching Products:\n{prods_summary}"}
+
+    # Resolve active customer identity for scoped account data
+    company_customer_id, customer_name = resolve_company_customer_id(state)
+
+    # If identity is unresolved, do NOT expose account data
+    if not company_customer_id:
+        logger.info("[COMPANY_DATA] Customer identity unresolved. Scoped data access denied.")
+        return {
+            "company_data_context": (
+                "Identity Unresolved: To assist with account-specific information (such as orders, shipments, payments, or subscriptions), "
+                "please log in to your account or provide the email address associated with your account."
+            )
+        }
+
     retrieved_sections = []
 
-    # Scenario A: Explicit Order ID given in prompt or state
+    # Scenario A: Order ID lookup (SCOPED & AUTHORIZED)
     if order_ids:
         for ord_id in set(order_ids):
-            logger.info(f"[COMPANY_DATA] Fetching details for Order ID: {ord_id}")
-            details = get_order_details(ord_id)
+            logger.info(f"[COMPANY_DATA] Scoped fetching for Order ID '{ord_id}' (User: {company_customer_id})")
+            details = get_order_details(ord_id, company_customer_id)
             if details.get("found"):
                 order_info = details["order"]
                 shipment_info = details.get("shipment") or {}
@@ -119,88 +173,55 @@ async def company_data_agent_node(state: AgentState) -> AgentState:
                 )
                 retrieved_sections.append(sec)
             else:
-                retrieved_sections.append(f"Order Search: No order record found for Order ID '{ord_id}'.")
+                retrieved_sections.append(f"Order Search: Order '{ord_id}' was not found for your account.")
 
     # Scenario B: Subscription inquiry
     elif "subscription" in message.lower() or (intent == "account_issue" and "plan" in message.lower()):
-        if customer_identifier:
-            logger.info(f"[COMPANY_DATA] Fetching subscription for customer: {customer_identifier}")
-            sub_res = get_customer_subscription(customer_identifier)
-            if sub_res.get("found"):
-                sub = sub_res["subscription"]
-                sec = (
-                    f"Subscription Record:\n"
-                    f"- Customer: {sub_res.get('customer_name')}\n"
-                    f"- Subscription ID: {sub['subscription_id']}\n"
-                    f"- Plan: {sub['plan']}\n"
-                    f"- Status: {sub['status']}\n"
-                    f"- Billing Cycle: {sub['billing_cycle']}\n"
-                    f"- Renewal Date: {sub['renewal_date']}\n"
-                    f"- Amount: ${sub['amount']}"
-                )
-                retrieved_sections.append(sec)
-            else:
-                retrieved_sections.append(sub_res.get("message", "No subscription record found."))
-        else:
-            retrieved_sections.append(
-                "Subscription Search: Customer identifier missing. Please ask customer to provide their registered email address or customer ID."
+        logger.info(f"[COMPANY_DATA] Scoped subscription fetch for customer: {company_customer_id}")
+        sub_res = get_customer_subscription(company_customer_id)
+        if sub_res.get("found"):
+            sub = sub_res["subscription"]
+            sec = (
+                f"Subscription Record:\n"
+                f"- Customer: {sub_res.get('customer_name')}\n"
+                f"- Subscription ID: {sub['subscription_id']}\n"
+                f"- Plan: {sub['plan']}\n"
+                f"- Status: {sub['status']}\n"
+                f"- Billing Cycle: {sub['billing_cycle']}\n"
+                f"- Renewal Date: {sub['renewal_date']}\n"
+                f"- Amount: ${sub['amount']}"
             )
+            retrieved_sections.append(sec)
+        else:
+            retrieved_sections.append(sub_res.get("message", "No subscription record found for your account."))
 
-    # Scenario C: Payment status inquiry without explicit order ID
+    # Scenario C: Payment status inquiry
     elif "payment" in message.lower() or intent == "billing_issue":
-        if customer_identifier:
-            logger.info(f"[COMPANY_DATA] Fetching recent order payment status for customer: {customer_identifier}")
-            orders_res = get_customer_orders(customer_identifier, limit=1)
-            if orders_res.get("found") and orders_res.get("orders"):
-                latest_order = orders_res["orders"][0]
-                payment_res = get_payment_status(latest_order["order_id"])
-                if payment_res.get("found"):
-                    sec = (
-                        f"Payment Record for Order {latest_order['order_id']}:\n"
-                        f"- Payment ID: {payment_res['payment_id']}\n"
-                        f"- Payment Status: {payment_res['payment_status']}\n"
-                        f"- Amount: ${payment_res['amount']}\n"
-                        f"- Method: {payment_res['payment_method']}\n"
-                        f"- Transaction Ref: {payment_res.get('transaction_reference', 'N/A')}\n"
-                        f"- Date: {payment_res['payment_date']}"
-                    )
-                    retrieved_sections.append(sec)
-                else:
-                    retrieved_sections.append(f"Payment Search: No payment found for latest order {latest_order['order_id']}.")
-            else:
-                retrieved_sections.append(orders_res.get("message", "No orders found for customer to check payment status."))
-        else:
-            retrieved_sections.append(
-                "Payment Search: Customer identifier missing. Please ask customer for order ID or registered email."
-            )
-
-    # Scenario D: Product details query
-    elif product_ids or intent == "product_question":
-        query = product_ids[0] if product_ids else message
-        logger.info(f"[COMPANY_DATA] Fetching product details for: {query}")
-        prod_res = get_product_details(query)
-        if prod_res.get("found"):
-            if "product" in prod_res:
-                p = prod_res["product"]
+        logger.info(f"[COMPANY_DATA] Scoped payment fetch for customer: {company_customer_id}")
+        orders_res = get_customer_orders(company_customer_id, limit=1)
+        if orders_res.get("found") and orders_res.get("orders"):
+            latest_order = orders_res["orders"][0]
+            payment_res = get_payment_status(latest_order["order_id"], company_customer_id)
+            if payment_res.get("found"):
                 sec = (
-                    f"Product Record:\n"
-                    f"- Name: {p['product_name']}\n"
-                    f"- Category: {p['category']}\n"
-                    f"- Price: ${p['price']}\n"
-                    f"- Stock Status: {p['stock_status']}\n"
-                    f"- Description: {p['description']}"
+                    f"Payment Record for Order {latest_order['order_id']}:\n"
+                    f"- Payment ID: {payment_res['payment_id']}\n"
+                    f"- Payment Status: {payment_res['payment_status']}\n"
+                    f"- Amount: ${payment_res['amount']}\n"
+                    f"- Method: {payment_res['payment_method']}\n"
+                    f"- Transaction Ref: {payment_res.get('transaction_reference', 'N/A')}\n"
+                    f"- Date: {payment_res['payment_date']}"
                 )
                 retrieved_sections.append(sec)
-            elif "products" in prod_res:
-                prods_summary = "\n".join([f"- {p['product_name']} (${p['price']}) - Status: {p['stock_status']}" for p in prod_res["products"]])
-                retrieved_sections.append(f"Matching Products:\n{prods_summary}")
+            else:
+                retrieved_sections.append(f"Payment Search: No payment record found for order {latest_order['order_id']}.")
         else:
-            retrieved_sections.append(prod_res.get("message", "No product details found."))
+            retrieved_sections.append("Payment Search: No orders found for your account.")
 
-    # Scenario E: General Order / Shipment Inquiry ("Where is my order?")
-    elif customer_identifier:
-        logger.info(f"[COMPANY_DATA] Fetching customer orders for customer: {customer_identifier}")
-        orders_res = get_customer_orders(customer_identifier, limit=3)
+    # Scenario D: General Order / Shipment Inquiry ("Where is my order?")
+    else:
+        logger.info(f"[COMPANY_DATA] Scoped order fetch for customer: {company_customer_id}")
+        orders_res = get_customer_orders(company_customer_id, limit=3)
         if orders_res.get("found") and orders_res.get("orders"):
             orders_summary = []
             for o in orders_res["orders"]:
@@ -213,12 +234,8 @@ async def company_data_agent_node(state: AgentState) -> AgentState:
             sec = f"Recent Orders for Customer {orders_res.get('customer_name')} ({orders_res.get('customer_id')}):\n" + "\n".join(orders_summary)
             retrieved_sections.append(sec)
         else:
-            retrieved_sections.append(orders_res.get("message", "No recent orders found for this customer."))
-    else:
-        retrieved_sections.append(
-            "Customer matching: Unable to identify customer or order ID. Please ask the customer to provide their order ID or registered email address."
-        )
+            retrieved_sections.append(orders_res.get("message", "No recent orders found for your account."))
 
     context_str = "\n\n".join(retrieved_sections) if retrieved_sections else None
-    logger.info(f"[COMPANY_DATA] Context generated ({len(retrieved_sections)} sections).")
+    logger.info(f"[COMPANY_DATA] Scoped context generated ({len(retrieved_sections)} sections).")
     return {"company_data_context": context_str}

@@ -133,12 +133,24 @@ class CustomerService:
         return [self._to_response(r) for r in results]
 
     def _to_response(self, data: dict) -> CustomerResponse:
+        tier_raw = str(data.get('tier') or 'standard').lower()
+        try:
+            tier_val = CustomerTier(tier_raw)
+        except ValueError:
+            tier_val = CustomerTier.STANDARD
+
+        sentiment_raw = str(data.get('sentiment') or 'neutral').lower()
+        try:
+            sentiment_val = Sentiment(sentiment_raw)
+        except ValueError:
+            sentiment_val = Sentiment.NEUTRAL
+
         return CustomerResponse(
             id=data['id'],
             name=data.get('name'),
             email=data['email'],
-            tier=CustomerTier(data.get('tier', 'standard')),
-            sentiment=Sentiment(data.get('sentiment', 'neutral')),
+            tier=tier_val,
+            sentiment=sentiment_val,
             total_tickets=data.get('total_tickets', 0),
             resolved_tickets=data.get('resolved_tickets', 0),
             avg_response_time=data.get('avg_response_time', 0.0),

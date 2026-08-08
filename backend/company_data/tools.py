@@ -5,84 +5,78 @@ _service = CompanyDataService()
 
 
 def get_customer_by_email(email: str) -> Dict[str, Any]:
-    """
-    Retrieve company customer details by email address.
-    """
     if not email or not isinstance(email, str):
         return {"found": False, "error": "Invalid email parameter."}
     return _service.get_customer_by_email(email.strip())
 
 
 def get_customer_by_id(customer_id: str) -> Dict[str, Any]:
-    """
-    Retrieve company customer details by customer ID (e.g. CUST-1001).
-    """
     if not customer_id or not isinstance(customer_id, str):
         return {"found": False, "error": "Invalid customer_id parameter."}
     return _service.get_customer_by_id(customer_id.strip())
 
 
-def get_customer_orders(customer_id_or_email: str, limit: int = 5) -> Dict[str, Any]:
+def get_customer_orders(company_customer_id: str, limit: int = 5) -> Dict[str, Any]:
     """
-    Retrieve recent orders for a customer specified by ID or email.
+    Retrieve orders for the authenticated customer only.
     """
-    if not customer_id_or_email or not isinstance(customer_id_or_email, str):
-        return {"found": False, "error": "Invalid customer identifier parameter."}
-    return _service.get_customer_orders(customer_id_or_email.strip(), limit=limit)
+    if not company_customer_id or not isinstance(company_customer_id, str):
+        return {"found": False, "error": "Identity unresolved. Cannot retrieve orders."}
+    return _service.get_customer_orders_scoped(company_customer_id.strip(), limit=limit)
 
 
-def get_order_details(order_id: str) -> Dict[str, Any]:
+def get_order_details(order_id: str, company_customer_id: str) -> Dict[str, Any]:
     """
-    Retrieve full order details including line items, shipment, payment, and shipping address.
+    Retrieve order details ONLY if the order belongs to the authenticated customer.
     """
     if not order_id or not isinstance(order_id, str):
         return {"found": False, "error": "Invalid order_id parameter."}
-    return _service.get_order_details(order_id.strip())
+    return _service.get_order_details_scoped(order_id.strip(), company_customer_id)
 
 
-def get_order_status(order_id: str) -> Dict[str, Any]:
+def get_order_status(order_id: str, company_customer_id: str) -> Dict[str, Any]:
     """
-    Retrieve current order status, delivery dates, and tracking reference for an order.
+    Retrieve order status ONLY if the order belongs to the authenticated customer.
     """
     if not order_id or not isinstance(order_id, str):
         return {"found": False, "error": "Invalid order_id parameter."}
-    return _service.get_order_status(order_id.strip())
+    return _service.get_order_status_scoped(order_id.strip(), company_customer_id)
 
 
-def get_shipment_status(order_id_or_tracking: str) -> Dict[str, Any]:
+def get_shipment_status(order_id_or_tracking: str, company_customer_id: str) -> Dict[str, Any]:
     """
-    Retrieve shipment status and tracking details using an order ID or tracking number.
+    Retrieve shipment status ONLY if the order belongs to the authenticated customer.
     """
     if not order_id_or_tracking or not isinstance(order_id_or_tracking, str):
         return {"found": False, "error": "Invalid shipment identifier parameter."}
-    return _service.get_shipment_status(order_id_or_tracking.strip())
+    return _service.get_shipment_status_scoped(order_id_or_tracking.strip(), company_customer_id)
 
 
-def get_payment_status(order_id_or_payment_id: str) -> Dict[str, Any]:
+def get_payment_status(order_id_or_payment_id: str, company_customer_id: str) -> Dict[str, Any]:
     """
-    Retrieve payment status, payment method, amount, and transaction reference.
+    Retrieve payment status ONLY if it belongs to the authenticated customer.
     """
     if not order_id_or_payment_id or not isinstance(order_id_or_payment_id, str):
         return {"found": False, "error": "Invalid payment identifier parameter."}
-    return _service.get_payment_status(order_id_or_payment_id.strip())
+    return _service.get_payment_status_scoped(order_id_or_payment_id.strip(), company_customer_id)
 
 
 def get_product_details(product_id_or_name: str) -> Dict[str, Any]:
     """
-    Retrieve product specifications, price, and stock status by product ID or name query.
+    Retrieve public product catalog details.
     """
     if not product_id_or_name or not isinstance(product_id_or_name, str):
         return {"found": False, "error": "Invalid product identifier parameter."}
     return _service.get_product_details(product_id_or_name.strip())
 
 
-def get_customer_subscription(customer_id_or_email: str) -> Dict[str, Any]:
+def get_customer_subscription(company_customer_id: str) -> Dict[str, Any]:
     """
-    Retrieve customer subscription plan, billing cycle, renewal date, and status.
+    Retrieve subscription details for the authenticated customer only.
     """
-    if not customer_id_or_email or not isinstance(customer_id_or_email, str):
-        return {"found": False, "error": "Invalid customer identifier parameter."}
-    return _service.get_customer_subscription(customer_id_or_email.strip())
+    if not company_customer_id or not isinstance(company_customer_id, str):
+        return {"found": False, "error": "Identity unresolved. Cannot retrieve subscription."}
+    return _service.get_customer_subscription_scoped(company_customer_id.strip())
 
 
 COMPANY_DATA_TOOLS = {

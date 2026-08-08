@@ -75,15 +75,33 @@ graph.add_edge("escalation_agent", END)
 workflow = graph.compile()
 
 
+from fastapi import APIRouter, HTTPException, Header, Cookie
+from apps.auth.service import AuthService
+
 @router.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    authorization: Optional[str] = Header(None),
+    sf_session: Optional[str] = Cookie(None)
+):
     session_id = request.session_id or str(uuid4())
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:].strip()
+    elif sf_session:
+        token = sf_session.strip()
+
+    target_customer_id = request.customer_id
+    if token:
+        auth_cust = AuthService().get_authenticated_customer(token)
+        if auth_cust:
+            target_customer_id = auth_cust["id"]
 
     async def generate():
         try:
             start_time = time.time()
 
-            contact_id = ensure_contact(request.customer_id, "chat")
+            contact_id = ensure_contact(target_customer_id, "chat")
             conversation_id = get_or_create_conversation(contact_id, "chat", session_id)
             chat_history = get_conversation_messages(conversation_id)
 
