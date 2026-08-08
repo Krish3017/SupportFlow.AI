@@ -61,10 +61,22 @@ class ActivityService:
             except (json.JSONDecodeError, TypeError):
                 metadata = None
 
+        raw_type = (data.get('type') or 'system').lower()
+        try:
+            act_type = ActivityType(raw_type)
+        except ValueError:
+            act_type = ActivityType.SYSTEM
+
+        raw_level = (data.get('level') or 'info').lower()
+        try:
+            act_level = ActivityLevel(raw_level)
+        except ValueError:
+            act_level = ActivityLevel.INFO
+
         return ActivityResponse(
             id=data['id'],
-            type=ActivityType(data['type']),
-            level=ActivityLevel(data['level']),
+            type=act_type,
+            level=act_level,
             message=data['message'],
             timestamp=data['timestamp'],
             metadata=metadata

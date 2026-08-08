@@ -12,11 +12,10 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isPageLoading, setIsPageLoading] = useState(true);
 
-  // Initial loading spinner simulation on route mount
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsPageLoading(false);
-    }, 1500);
+    }, 1200);
     return () => clearTimeout(timer);
   }, []);
 
@@ -28,7 +27,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-50 font-sans flex">
+    <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans flex">
       {/* 3D Isometric Loading Overlay */}
       {isPageLoading && <IsometricLoader text="Loading SupportFlow System..." />}
 
@@ -36,9 +35,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <Sidebar />
 
       {/* Main Content Area */}
-      <div className="flex-1 pl-56 flex flex-col min-w-0 min-h-screen">
+      <div className="flex-1 pl-60 flex flex-col min-w-0 min-h-screen">
         <Header onTriggerReload={handleManualReload} />
-        <main className="flex-1 p-5 overflow-y-auto">{children}</main>
+        <main className="flex-1 p-6 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

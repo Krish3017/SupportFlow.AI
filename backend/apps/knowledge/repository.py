@@ -102,9 +102,9 @@ class KnowledgeRepository(BaseRepository):
             SELECT
                 COUNT(*) as total_documents,
                 COALESCE(SUM(chunks), 0) as total_chunks,
-                SUM(CASE WHEN status = 'indexed' THEN 1 ELSE 0 END) as indexed_documents,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_documents,
-                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_documents,
+                COALESCE(SUM(CASE WHEN status = 'indexed' THEN 1 ELSE 0 END), 0) as indexed_documents,
+                COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed_documents,
+                COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) as pending_documents,
                 COALESCE(SUM(retrieval_count), 0) as total_retrievals
             FROM knowledge_documents
         """

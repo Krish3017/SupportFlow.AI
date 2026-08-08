@@ -10,6 +10,10 @@ class ActivityType(str, Enum):
     SECURITY = "security"
     TICKET = "ticket"
     CUSTOMER = "customer"
+    CONVERSATION = "conversation"
+    TELEGRAM = "telegram"
+    KNOWLEDGE = "knowledge"
+    CHAT = "chat"
 
 class ActivityLevel(str, Enum):
     INFO = "info"

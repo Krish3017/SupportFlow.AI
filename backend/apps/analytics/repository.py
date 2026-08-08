@@ -117,8 +117,8 @@ class AnalyticsRepository(BaseRepository):
                 COUNT(*) as total_documents,
                 COALESCE(SUM(chunks), 0) as total_chunks,
                 COALESCE(SUM(retrieval_count), 0) as total_retrievals,
-                SUM(CASE WHEN status = 'indexed' THEN 1 ELSE 0 END) as indexed,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+                COALESCE(SUM(CASE WHEN status = 'indexed' THEN 1 ELSE 0 END), 0) as indexed,
+                COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed
             FROM knowledge_documents
         """
         result = self._execute_query(query, fetch_one=True)

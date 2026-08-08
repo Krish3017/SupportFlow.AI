@@ -62,12 +62,14 @@ export default function ConversationsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-zinc-50">Conversations</h1>
-          <p className="text-xs text-zinc-400">Multi-channel support threads (Chat, Email, Telegram)</p>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-50">Conversations</h1>
+          <p className="text-xs text-zinc-300 font-medium mt-0.5">
+            Multi-channel customer communication threads (Web Chat, Email, Telegram)
+          </p>
         </div>
         <button
           onClick={loadConversations}
-          className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 hover:text-zinc-100 flex items-center gap-1.5 transition-colors"
+          className="p-2 rounded-lg bg-zinc-900 border border-zinc-700/80 text-xs font-semibold text-zinc-200 hover:text-zinc-50 flex items-center gap-1.5 transition-colors shadow-sm"
         >
           <RotateCw className="h-3.5 w-3.5" />
           <span>Refresh</span>
@@ -90,13 +92,13 @@ export default function ConversationsPage() {
                 key={tab.id}
                 onClick={() => setSelectedChannel(tab.id)}
                 className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                  'flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all',
                   isActive
-                    ? 'bg-zinc-800 text-zinc-50 shadow-sm border border-zinc-700/60'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
+                    ? 'bg-zinc-800 text-zinc-50 shadow-sm border border-zinc-700/70'
+                    : 'text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800/40'
                 )}
               >
-                <Icon className={cn('h-3.5 w-3.5', isActive ? 'text-emerald-400' : 'text-zinc-400')} />
+                <Icon className={cn('h-4 w-4', isActive ? 'text-emerald-400' : 'text-zinc-400')} />
                 <span>{tab.label}</span>
               </button>
             );
@@ -104,85 +106,85 @@ export default function ConversationsPage() {
         </div>
 
         {/* Search Input */}
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
           <input
             type="text"
             placeholder="Search threads..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#111113] border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
+            className="w-full bg-[#111113] border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2 text-xs text-zinc-100 font-medium placeholder-zinc-400 focus:outline-none focus:border-zinc-700"
           />
         </div>
       </div>
 
       {/* Conversations List */}
-      <div className="bg-[#111113] border border-zinc-800/80 rounded-xl p-4">
+      <div className="bg-[#111113] border border-zinc-800/90 rounded-xl p-5 shadow-xl">
         {loading ? (
-          <div className="py-12 text-center text-xs text-zinc-400 animate-pulse">
+          <div className="py-12 text-center text-xs text-zinc-300 font-semibold animate-pulse">
             Loading {selectedChannel} conversations...
           </div>
         ) : error ? (
-          <div className="py-8 text-center text-rose-400 text-xs">{error}</div>
+          <div className="py-8 text-center text-rose-400 text-xs font-semibold">{error}</div>
         ) : conversations.length === 0 ? (
-          <div className="py-12 text-center text-zinc-500 text-xs">
+          <div className="py-12 text-center text-zinc-400 text-xs font-medium">
             No active conversations found for {selectedChannel} channel
           </div>
         ) : (
-          <div className="border border-zinc-800/80 rounded-lg overflow-hidden">
-            <table className="w-full text-left text-xs text-zinc-300 border-collapse">
-              <thead className="bg-[#09090b] text-[10px] text-zinc-500 font-bold uppercase tracking-wider border-b border-zinc-800/80">
+          <div className="border border-zinc-800/90 rounded-lg overflow-hidden">
+            <table className="w-full text-left text-xs text-zinc-200 border-collapse">
+              <thead className="bg-[#09090b] text-xs text-zinc-300 font-extrabold uppercase tracking-wider border-b border-zinc-800">
                 <tr>
-                  <th className="py-2.5 px-3">Customer / Session</th>
-                  <th className="py-2.5 px-3">Channel</th>
-                  <th className="py-2.5 px-3">Messages</th>
-                  <th className="py-2.5 px-3">Last Active</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Inspect</th>
+                  <th className="py-3 px-4">Customer / Session</th>
+                  <th className="py-3 px-4">Channel</th>
+                  <th className="py-3 px-4">Messages</th>
+                  <th className="py-3 px-4">Last Active</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Inspect</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/60 font-medium">
+              <tbody className="divide-y divide-zinc-800/70 font-medium">
                 {conversations.map((conv) => (
                   <tr
                     key={conv.id}
                     onClick={() => selectConversation(conv.id)}
-                    className="hover:bg-zinc-800/40 cursor-pointer transition-colors group"
+                    className="hover:bg-zinc-800/50 cursor-pointer transition-colors group"
                   >
-                    <td className="py-2.5 px-3">
-                      <div className="font-semibold text-zinc-100">
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-zinc-100 text-xs">
                         {conv.customer?.email || conv.customer_id || 'Anonymous Customer'}
                       </div>
-                      {conv.ticket_id && (
-                        <div className="text-[10px] text-zinc-500 font-mono">Ticket #{conv.ticket_id}</div>
-                      )}
+                      <div className="text-[11px] text-zinc-400 font-mono">
+                        {conv.id}
+                      </div>
                     </td>
-                    <td className="py-2.5 px-3">
-                      <span className="bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded text-[10px] uppercase font-mono text-zinc-400">
+                    <td className="py-3 px-4">
+                      <span className="bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded text-[11px] uppercase font-bold font-mono text-zinc-300">
                         {conv.channel || selectedChannel}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-zinc-400">
-                      {conv.message_count || 0} messages
+                    <td className="py-3 px-4 text-zinc-200 font-bold">
+                      {conv.message_count || 0} msgs
                     </td>
-                    <td className="py-2.5 px-3 text-zinc-400 text-[11px]">
+                    <td className="py-3 px-4 text-zinc-300 font-medium text-xs">
                       {conv.started_at
                         ? formatDistanceToNow(new Date(conv.started_at), { addSuffix: true })
                         : 'Recently'}
                     </td>
-                    <td className="py-2.5 px-3">
+                    <td className="py-3 px-4">
                       <span
                         className={cn(
-                          'text-[10px] font-semibold px-2 py-0.5 rounded-full border capitalize',
+                          'text-[10px] font-bold px-2.5 py-0.5 rounded-full border capitalize',
                           conv.status === 'open' || conv.status === 'active'
-                            ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/40'
-                            : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                            ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700/80'
+                            : 'bg-zinc-900 text-zinc-300 border-zinc-700'
                         )}
                       >
                         {conv.status || 'active'}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-right">
-                      <ChevronRight className="h-4 w-4 text-zinc-500 group-hover:text-zinc-200 inline-block" />
+                    <td className="py-3 px-4 text-right">
+                      <ChevronRight className="h-4.5 w-4.5 text-zinc-400 group-hover:text-zinc-100 inline-block transition-transform group-hover:translate-x-0.5" />
                     </td>
                   </tr>
                 ))}
@@ -196,54 +198,58 @@ export default function ConversationsPage() {
       <DetailDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        title={`Conversation Details`}
-        subtitle={selectedConv?.customer?.email || 'Message Thread'}
+        title="Conversation Thread Inspection"
+        subtitle={selectedConv?.customer?.email || selectedConv?.id || 'Message Thread'}
         widthClass="max-w-xl"
       >
         {drawerLoading ? (
-          <div className="py-12 text-center text-zinc-400 text-xs animate-pulse">
+          <div className="py-16 text-center text-zinc-300 text-xs font-semibold animate-pulse">
             Loading conversation messages...
           </div>
         ) : selectedConv ? (
           <div className="space-y-4">
             {/* Meta Header */}
-            <div className="p-3 bg-[#111113] border border-zinc-800 rounded-lg text-xs space-y-1">
-              <div className="flex justify-between text-zinc-400">
+            <div className="p-3.5 bg-[#111113] border border-zinc-800 rounded-xl text-xs space-y-1.5 font-medium">
+              <div className="flex justify-between text-zinc-300">
                 <span>Customer:</span>
-                <span className="font-semibold text-zinc-100">{selectedConv.customer?.email || 'N/A'}</span>
+                <span className="font-bold text-zinc-100">{selectedConv.customer?.email || 'Anonymous'}</span>
               </div>
-              <div className="flex justify-between text-zinc-400">
+              <div className="flex justify-between text-zinc-300">
                 <span>Channel:</span>
-                <span className="uppercase font-mono text-zinc-300">{selectedConv.channel}</span>
+                <span className="uppercase font-bold font-mono text-emerald-400">{selectedConv.channel}</span>
+              </div>
+              <div className="flex justify-between text-zinc-300">
+                <span>Thread ID:</span>
+                <span className="font-mono text-zinc-200">{selectedConv.id}</span>
               </div>
             </div>
 
             {/* Chat Bubbles */}
             <div className="space-y-3 pt-2">
               {selectedConv.messages?.length === 0 ? (
-                <div className="text-center py-6 text-zinc-500">No messages in this thread</div>
+                <div className="text-center py-6 text-zinc-400 text-xs">No messages in this thread</div>
               ) : (
                 selectedConv.messages?.map((msg: any) => {
                   const isUser = msg.role === 'user';
                   return (
                     <div
                       key={msg.id}
-                      className={cn('flex items-start gap-2 text-xs', isUser ? 'flex-row-reverse' : 'flex-row')}
+                      className={cn('flex items-start gap-2.5 text-xs', isUser ? 'flex-row-reverse' : 'flex-row')}
                     >
                       <div
                         className={cn(
-                          'h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0',
-                          isUser ? 'bg-zinc-800 text-zinc-200' : 'bg-emerald-950 text-emerald-300 border border-emerald-800/40'
+                          'h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
+                          isUser ? 'bg-zinc-800 text-zinc-100' : 'bg-emerald-950 text-emerald-300 border border-emerald-700/80'
                         )}
                       >
-                        {isUser ? <User className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+                        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                       </div>
                       <div
                         className={cn(
-                          'max-w-[80%] rounded-xl p-3 border text-xs leading-relaxed',
+                          'max-w-[80%] rounded-xl p-3.5 border text-xs leading-relaxed font-medium',
                           isUser
-                            ? 'bg-zinc-800/90 text-zinc-100 border-zinc-700/80'
-                            : 'bg-[#111113] text-zinc-200 border-zinc-800'
+                            ? 'bg-zinc-800 text-zinc-100 border-zinc-700/80'
+                            : 'bg-[#111113] text-zinc-100 border-zinc-800'
                         )}
                       >
                         <p>{msg.content}</p>
@@ -255,7 +261,7 @@ export default function ConversationsPage() {
             </div>
           </div>
         ) : (
-          <div className="py-12 text-center text-zinc-500 text-xs">No details found</div>
+          <div className="py-16 text-center text-zinc-400 text-xs">No details found</div>
         )}
       </DetailDrawer>
     </div>
