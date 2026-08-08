@@ -111,7 +111,7 @@ export function ChatContainer() {
       }
     }
 
-    const sessionInfo = await fetchSessionConversation(sessionId);
+    const sessionInfo = await fetchSessionConversation(sessionId, currentToken);
     if (sessionInfo.conversation_id) {
       const history = await fetchConversationHistory(sessionInfo.conversation_id, currentToken);
       if (history && history.status !== 'closed' && history.status !== 'archived') {
@@ -152,9 +152,13 @@ export function ChatContainer() {
       setPasswordInput('');
       setNameInput('');
 
-      // Refresh chat session for authenticated customer
+      // Refresh chat session for newly authenticated customer with a fresh session_id
       localStorage.removeItem(STORAGE_KEYS.CONVERSATION_ID);
       conversationIdRef.current = null;
+      const newSessionId = crypto.randomUUID();
+      localStorage.setItem(STORAGE_KEYS.SESSION_ID, newSessionId);
+      sessionIdRef.current = newSessionId;
+      setMessages([]);
       restoredRef.current = false;
       setIsRestoring(true);
       restoreSession();
@@ -167,6 +171,9 @@ export function ChatContainer() {
     await logoutCustomer(authToken);
     localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
     localStorage.removeItem(STORAGE_KEYS.CONVERSATION_ID);
+    const newSessionId = crypto.randomUUID();
+    localStorage.setItem(STORAGE_KEYS.SESSION_ID, newSessionId);
+    sessionIdRef.current = newSessionId;
     setAuthToken('');
     setAuthUser(null);
     conversationIdRef.current = null;

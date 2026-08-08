@@ -96,13 +96,25 @@ def ensure_contact(contact_id: str, channel: str, name: Optional[str] = None) ->
             cur.execute("""
                 INSERT INTO supportflow.contact_channels (contact_id, channel_type, channel_identifier, verified, created_at)
                 VALUES (%s, %s, %s, FALSE, %s)
-                ON CONFLICT (contact_id, channel_type, channel_identifier) DO NOTHING
+                ON CONFLICT (contact_id, channel_type) DO NOTHING
             """, (contact_id, channel, channel_id, datetime.utcnow().isoformat()))
 
         conn.commit()
     except Exception as e:
         logger.error(f"Contact persist failed: {e}")
         conn.rollback()
+        try:
+            with conn.cursor() as cur:
+                now = datetime.utcnow().isoformat()
+                fallback_email = f"tg_{contact_id}_{uuid4().hex[:4]}@{channel}.supportflow"
+                cur.execute("""
+                    INSERT INTO supportflow.customers (id, name, email, tier, sentiment, joined_date, last_interaction, total_conversations, resolved_conversations)
+                    VALUES (%s, %s, %s, 'standard', 'neutral', %s, %s, 0, 0)
+                    ON CONFLICT (id) DO NOTHING
+                """, (contact_id, name or contact_id, fallback_email, now, now))
+            conn.commit()
+        except Exception as ex2:
+            logger.error(f"Fallback contact persist failed: {ex2}")
     finally:
         conn.close()
 
@@ -140,19 +152,28 @@ def get_or_create_conversation(contact_id: str, channel: str, session_token: str
                 conn.commit()
                 return existing['id']
 
-            # 2. Fallback: try finding active conversation by session_token
+            # 2. Fallback: try finding active conversation by session_token, BUT ONLY if it belongs to this contact_id or is an anonymous conversation being claimed
             if session_token:
                 cur.execute("""
-                    SELECT id FROM supportflow.conversations
+                    SELECT id, contact_id FROM supportflow.conversations
                     WHERE session_token = %s AND status NOT IN ('closed', 'archived')
                     ORDER BY updated_at DESC LIMIT 1
                 """, (session_token,))
                 existing_sess = cur.fetchone()
 
                 if existing_sess:
-                    conn.commit()
-                    return existing_sess['id']
+                    conv_contact_id = existing_sess['contact_id']
+                    # Re-use ONLY if conversation contact_id matches current contact_id or if claiming an anonymous conversation
+                    if conv_contact_id == contact_id or (conv_contact_id and conv_contact_id.startswith("anon_") and not contact_id.startswith("anon_")):
+                        cur.execute(
+                            "UPDATE supportflow.conversations SET contact_id = %s, updated_at = %s WHERE id = %s",
+                            (contact_id, datetime.utcnow().isoformat(), existing_sess['id'])
+                        )
+                        conn.commit()
+                        return existing_sess['id']
+                    # If conv_contact_id belongs to another customer, DO NOT REUSE IT!
 
+            # 3. Create brand new conversation for this contact_id
             conv_id = _gen_id("conv")
             now = datetime.utcnow().isoformat()
             cur.execute("""

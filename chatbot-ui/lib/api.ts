@@ -145,9 +145,13 @@ export async function fetchConversationHistory(conversationId: string, token?: s
   }
 }
 
-export async function fetchSessionConversation(sessionId: string): Promise<SessionInfo> {
+export async function fetchSessionConversation(sessionId: string, token?: string): Promise<SessionInfo> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/chat/session/${sessionId}`);
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(`${API_BASE_URL}/api/chat/session/${sessionId}`, { headers });
     if (!response.ok) return { conversation_id: null, status: null };
     return await response.json();
   } catch {

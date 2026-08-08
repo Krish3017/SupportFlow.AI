@@ -215,19 +215,49 @@ async def get_chat_history(
 
 
 @router.get("/chat/session/{session_id}")
-async def get_session_conversation(session_id: str):
+async def get_session_conversation(
+    session_id: str,
+    authorization: Optional[str] = Header(None),
+    sf_session: Optional[str] = Cookie(None)
+):
     from shared.persistence import _get_db
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:].strip()
+    elif sf_session:
+        token = sf_session.strip()
+
+    authenticated_customer_id = None
+    if token:
+        auth_cust = AuthService().get_authenticated_customer(token)
+        if auth_cust:
+            authenticated_customer_id = auth_cust["id"]
+
     conn = _get_db()
     try:
         with conn.cursor() as cur:
+            if authenticated_customer_id:
+                cur.execute("""
+                    SELECT id, status FROM supportflow.conversations
+                    WHERE contact_id = %s AND status NOT IN ('closed', 'archived')
+                    ORDER BY updated_at DESC LIMIT 1
+                """, (authenticated_customer_id,))
+                conv = cur.fetchone()
+                if conv:
+                    return {"conversation_id": conv['id'], "status": conv['status']}
+                return {"conversation_id": None, "status": None}
+
             cur.execute("""
-                SELECT id, status FROM supportflow.conversations
+                SELECT id, status, contact_id FROM supportflow.conversations
                 WHERE session_token = %s AND status NOT IN ('closed', 'archived')
                 ORDER BY updated_at DESC LIMIT 1
             """, (session_id,))
             conv = cur.fetchone()
 
             if not conv:
+                return {"conversation_id": None, "status": None}
+
+            if conv['contact_id'] and not conv['contact_id'].startswith("anon_"):
                 return {"conversation_id": None, "status": None}
 
             return {"conversation_id": conv['id'], "status": conv['status']}

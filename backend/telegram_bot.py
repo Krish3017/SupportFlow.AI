@@ -58,6 +58,8 @@ async def process_through_workflow(
         start_time = time.time()
 
         contact_id = ensure_contact(user_id, "telegram")
+        conversation_id = get_or_create_conversation(contact_id, "telegram", session_id)
+        user_msg_id = store_user_message(conversation_id, message)
 
         # Check if Telegram contact is linked to a company_customer_id
         conn = _get_db()
@@ -90,23 +92,24 @@ async def process_through_workflow(
                     logger.debug(f"Could not update contact email to {candidate_email}: {ex_db}")
                 finally:
                     conn.close()
-                return f"Thank you, {matched_cust.get('name')}! Your account ({candidate_email}) has been linked successfully. How can I help you today?"
+                response = f"Thank you, {matched_cust.get('name')}! Your account ({candidate_email}) has been linked successfully. How can I help you today?"
             else:
-                return f"No customer account found matching '{candidate_email}'. You can still ask general support questions."
+                response = f"No customer account found matching '{candidate_email}'. You can still ask general support questions."
+            
+            store_assistant_message(conversation_id, response, None)
+            return response
 
         # If unlinked and asking account-specific question, prompt for email
         msg_lower = message.lower()
         account_keywords = ["order", "shipment", "tracking", "payment", "subscription", "status", "my account"]
         if not comp_cust_id and any(kw in msg_lower for kw in account_keywords) and not is_policy_or_faq(msg_lower):
-            return "To help with account-specific information, please provide the email associated with your account."
+            response = "To help with account-specific information, please provide the email associated with your account."
+            store_assistant_message(conversation_id, response, None)
+            return response
 
-        conversation_id = get_or_create_conversation(contact_id, "telegram", session_id)
         chat_history = get_conversation_messages(conversation_id)
 
-        user_msg_id = store_user_message(conversation_id, message)
         execution_id = create_execution(user_msg_id, conversation_id)
-
-        chat_history.append({"role": "user", "content": message})
 
         result = await workflow.ainvoke({
             "customer_message": message,
