@@ -16,6 +16,7 @@ class Status(str, Enum):
     IN_PROGRESS = "in_progress"
     RESOLVED = "resolved"
     CLOSED = "closed"
+    ESCALATED = "escalated"
 
 
 class Channel(str, Enum):
@@ -50,6 +51,8 @@ class TicketResponse(BaseModel):
     customer: TicketCustomer
     priority: Priority
     status: Status
+    # Actual channel from the linked conversation — never defaults to "web"
+    channel: Optional[Channel] = None
     created_at: datetime
     updated_at: datetime
     assignee: Optional[str] = None
@@ -58,7 +61,6 @@ class TicketResponse(BaseModel):
 
 class TicketDetailResponse(TicketResponse):
     resolved_at: Optional[datetime] = None
-    conversation_channel: Optional[str] = None
     message_count: int = 0
 
 

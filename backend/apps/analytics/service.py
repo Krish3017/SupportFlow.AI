@@ -22,7 +22,6 @@ class AnalyticsService:
         customer_stats = self.repository.get_customer_stats()
         agent_stats = self.repository.get_agent_stats()
         knowledge_stats = self.repository.get_knowledge_stats()
-        execution_stats = self.repository.get_execution_stats()
 
         total_exec = agent_stats['total_executions'] or 0
         failed_exec = agent_stats['failed'] or 0
@@ -33,6 +32,7 @@ class AnalyticsService:
                 "total": ticket_stats['total'],
                 "open": ticket_stats['open'],
                 "resolved": ticket_stats['resolved'],
+                "escalated": ticket_stats['escalated'],
             },
             customers={
                 "total": customer_stats['total'],
@@ -66,7 +66,7 @@ class AnalyticsService:
             total=stats['total'],
             open=stats['open'],
             resolved=stats['resolved'],
-            escalated=0,
+            escalated=stats['escalated'],  # from real DB query — not hardcoded
             avg_resolution_time=0.0,
             by_priority=by_priority,
             by_channel=by_channel,

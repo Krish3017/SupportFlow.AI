@@ -44,11 +44,12 @@ class AnalyticsRepository(BaseRepository):
             SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open,
-                SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved
+                SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
+                SUM(CASE WHEN status = 'escalated' THEN 1 ELSE 0 END) as escalated
             FROM tickets
         """
         result = self._execute_query(query, fetch_one=True)
-        return dict(result) if result else {'total': 0, 'open': 0, 'resolved': 0}
+        return dict(result) if result else {'total': 0, 'open': 0, 'resolved': 0, 'escalated': 0}
 
     def get_tickets_by_priority(self) -> list:
         query = """

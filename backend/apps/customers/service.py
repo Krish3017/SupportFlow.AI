@@ -78,12 +78,27 @@ class CustomerService:
             for c in conversations_data
         ]
 
+        tier_raw = str(customer_data.get('tier') or 'standard').lower()
+        try:
+            tier_val = CustomerTier(tier_raw)
+        except ValueError:
+            tier_val = CustomerTier.STANDARD
+
+        sentiment_raw = str(customer_data.get('sentiment') or 'neutral').lower()
+        try:
+            sentiment_val = Sentiment(sentiment_raw)
+        except ValueError:
+            sentiment_val = Sentiment.NEUTRAL
+
         return CustomerDetailResponse(
             id=customer_data['id'],
             name=customer_data.get('name'),
             email=customer_data['email'],
-            tier=CustomerTier(customer_data.get('tier', 'standard')),
-            sentiment=Sentiment(customer_data.get('sentiment', 'neutral')),
+            company_customer_id=customer_data.get('company_customer_id'),
+            tier=tier_val,
+            sentiment=sentiment_val,
+            total_conversations=customer_data.get('total_conversations', 0),
+            resolved_conversations=customer_data.get('resolved_conversations', 0),
             total_tickets=stats.get('total_tickets', 0),
             resolved_tickets=stats.get('resolved_conversations', 0),
             avg_response_time=customer_data.get('avg_response_time', 0.0),
@@ -96,7 +111,7 @@ class CustomerService:
             tickets=tickets,
             conversations=conversations,
             open_tickets=stats.get('open_tickets', 0),
-            escalated_tickets=0
+            escalated_tickets=stats.get('escalated_tickets', 0)
         )
 
     def get_customer_tickets(self, customer_id: str) -> List[TicketSummary]:
@@ -149,8 +164,11 @@ class CustomerService:
             id=data['id'],
             name=data.get('name'),
             email=data['email'],
+            company_customer_id=data.get('company_customer_id'),
             tier=tier_val,
             sentiment=sentiment_val,
+            total_conversations=data.get('total_conversations', 0),
+            resolved_conversations=data.get('resolved_conversations', 0),
             total_tickets=data.get('total_tickets', 0),
             resolved_tickets=data.get('resolved_tickets', 0),
             avg_response_time=data.get('avg_response_time', 0.0),

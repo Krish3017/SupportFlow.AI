@@ -5,10 +5,21 @@ from .schemas import (
     TicketDetailResponse,
     TicketListResponse,
     TicketCustomer,
+    Channel,
 )
 from core.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+def _safe_channel(raw: Optional[str]) -> Optional[Channel]:
+    """Convert raw channel string to Channel enum, returning None for unknown values."""
+    if not raw:
+        return None
+    try:
+        return Channel(raw.lower())
+    except ValueError:
+        return None
 
 
 class TicketService:
@@ -61,12 +72,12 @@ class TicketService:
             ),
             priority=ticket_data['priority'],
             status=ticket_data['status'],
+            channel=_safe_channel(ticket_data.get('conversation_channel')),
             created_at=ticket_data['created_at'],
             updated_at=ticket_data['updated_at'],
             assignee=ticket_data.get('assignee'),
             escalation_reason=ticket_data.get('escalation_reason'),
             resolved_at=ticket_data.get('resolved_at'),
-            conversation_channel=ticket_data.get('conversation_channel'),
             message_count=ticket_data.get('message_count', 0)
         )
 
@@ -85,6 +96,7 @@ class TicketService:
             ),
             priority=data['priority'],
             status=data['status'],
+            channel=_safe_channel(data.get('conversation_channel')),
             created_at=data['created_at'],
             updated_at=data['updated_at'],
             assignee=data.get('assignee'),

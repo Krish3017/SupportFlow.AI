@@ -38,6 +38,7 @@ class AgentDetailResponse(AgentHealthResponse):
 
 
 class ExecutionStepResponse(BaseModel):
+    agent_id: str
     agent_name: str
     started_at: datetime
     completed_at: Optional[datetime] = None
@@ -52,6 +53,8 @@ class ExecutionStepResponse(BaseModel):
 class ExecutionResponse(BaseModel):
     id: str
     conversation_id: str
+    # customer_id resolved from conversation → contact_id
+    customer_id: Optional[str] = None
     message_id: Optional[str] = None
     started_at: datetime
     completed_at: Optional[datetime] = None
@@ -60,6 +63,8 @@ class ExecutionResponse(BaseModel):
     step_count: int
     intent: Optional[str] = None
     confidence: Optional[float] = None
+    sentiment: Optional[str] = None
+    priority: Optional[str] = None
     escalated: Optional[bool] = False
 
 

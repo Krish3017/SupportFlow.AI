@@ -19,10 +19,19 @@ class EmailResponse(BaseModel):
     status: EmailStatus
     ai_response: Optional[str] = None
     created_at: datetime
-    ticket_id: Optional[str] = None
+    # Linked SupportFlow conversation (set after AI processing)
+    conversation_id: Optional[str] = None
+
+class LinkedTicket(BaseModel):
+    id: str
+    subject: str
+    status: str
+    priority: str
+    created_at: datetime
 
 class EmailDetailResponse(EmailResponse):
-    linked_ticket: Optional[dict] = None
+    # Ticket is only present if the conversation was escalated and a ticket exists
+    linked_ticket: Optional[LinkedTicket] = None
 
 class EmailListResponse(BaseModel):
     emails: List[EmailResponse]

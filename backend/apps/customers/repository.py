@@ -129,16 +129,20 @@ class CustomerRepository(BaseRepository):
                 (SELECT COUNT(*) FROM conversations WHERE contact_id = ?) as total_conversations,
                 (SELECT COUNT(*) FROM conversations WHERE contact_id = ? AND status = 'resolved') as resolved_conversations,
                 (SELECT COUNT(*) FROM tickets WHERE contact_id = ?) as total_tickets,
-                (SELECT COUNT(*) FROM tickets WHERE contact_id = ? AND status = 'open') as open_tickets
+                (SELECT COUNT(*) FROM tickets WHERE contact_id = ? AND status IN ('open', 'in_progress')) as open_tickets,
+                (SELECT COUNT(*) FROM tickets WHERE contact_id = ? AND status = 'resolved') as resolved_tickets,
+                (SELECT COUNT(*) FROM tickets WHERE contact_id = ? AND status = 'escalated') as escalated_tickets
         """
         stats = self._execute_query(
             stats_query,
-            (customer_id, customer_id, customer_id, customer_id),
+            (customer_id, customer_id, customer_id, customer_id, customer_id, customer_id),
             fetch_one=True
         )
         return dict(stats) if stats else {
             'total_conversations': 0,
             'resolved_conversations': 0,
             'total_tickets': 0,
-            'open_tickets': 0
+            'open_tickets': 0,
+            'resolved_tickets': 0,
+            'escalated_tickets': 0
         }

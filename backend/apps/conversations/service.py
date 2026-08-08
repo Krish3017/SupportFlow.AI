@@ -85,6 +85,7 @@ class ConversationService:
             started_at=conversation_data['started_at'],
             updated_at=conversation_data['updated_at'],
             resolved_at=conversation_data.get('resolved_at'),
+            closed_at=conversation_data.get('closed_at'),
             messages=messages,
             session_id=conversation_data.get('session_token')
         )

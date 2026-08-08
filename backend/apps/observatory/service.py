@@ -116,6 +116,7 @@ class ObservatoryService:
             ExecutionResponse(
                 id=e['id'],
                 conversation_id=e['conversation_id'],
+                customer_id=e.get('customer_id'),
                 message_id=e.get('message_id'),
                 started_at=e['started_at'],
                 completed_at=e.get('completed_at'),
@@ -124,6 +125,8 @@ class ObservatoryService:
                 step_count=e.get('step_count', 0),
                 intent=e.get('intent'),
                 confidence=e.get('confidence'),
+                sentiment=e.get('sentiment'),
+                priority=e.get('priority'),
                 escalated=bool(e.get('escalated', 0))
             )
             for e in executions_data
@@ -143,6 +146,7 @@ class ObservatoryService:
 
         steps = [
             ExecutionStepResponse(
+                agent_id=s.get('agent_id', ''),
                 agent_name=s['agent_name'],
                 started_at=s['started_at'],
                 completed_at=s.get('completed_at'),
@@ -162,6 +166,7 @@ class ObservatoryService:
         return ExecutionDetailResponse(
             id=data['id'],
             conversation_id=data['conversation_id'],
+            customer_id=data.get('customer_id'),
             message_id=data.get('message_id'),
             started_at=data.get('started_at'),
             completed_at=data.get('completed_at'),
@@ -170,6 +175,9 @@ class ObservatoryService:
             step_count=len(steps),
             intent=data.get('intent'),
             confidence=data.get('confidence'),
+            sentiment=data.get('sentiment'),
+            priority=data.get('priority'),
+            escalated=bool(data.get('escalated', 0)),
             steps=steps
         )
 
@@ -178,6 +186,7 @@ class ObservatoryService:
 
         return [
             ExecutionStepResponse(
+                agent_id=s.get('agent_id', ''),
                 agent_name=s['agent_name'],
                 started_at=s['started_at'],
                 completed_at=s.get('completed_at'),

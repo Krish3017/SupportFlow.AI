@@ -94,6 +94,7 @@ class ConversationRepository(BaseRepository):
                 c.started_at,
                 c.updated_at,
                 c.resolved_at,
+                c.closed_at,
                 c.session_token,
                 cu.email as customer_email,
                 cu.name as customer_name,

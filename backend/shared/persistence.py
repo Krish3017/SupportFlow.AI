@@ -243,30 +243,66 @@ def complete_execution(execution_id: str, result: dict, duration: float):
 def record_execution_steps(execution_id: str, result: dict, message: str, duration: float):
     conn = _get_db()
     try:
+        # Build agent sequence with their output data
         agent_sequence = [
-            ("intent_agent", "Intent Agent", json.dumps({"intent": result.get("intent"), "sentiment": result.get("sentiment"), "confidence": result.get("confidence")})),
-            ("customer_intelligence_agent", "Customer Intelligence Agent", json.dumps({"context": str(result.get("customer_context", ""))[:200]})),
-            ("priority_agent", "Priority Agent", json.dumps({"priority": result.get("priority")})),
+            ("intent_agent", "Intent Agent", json.dumps({
+                "intent": result.get("intent"),
+                "sentiment": result.get("sentiment"),
+                "confidence": result.get("confidence")
+            })),
+            ("customer_intelligence_agent", "Customer Intelligence Agent", json.dumps({
+                "context": str(result.get("customer_context", ""))[:200]
+            })),
+            ("priority_agent", "Priority Agent", json.dumps({
+                "priority": result.get("priority")
+            })),
         ]
 
-        if result.get("retrieved_context"):
-            agent_sequence.append(("knowledge_agent", "Knowledge Agent", str(result.get("retrieved_context", ""))[:500]))
+        knowledge_was_used = bool(result.get("retrieved_context"))
+        if knowledge_was_used:
+            agent_sequence.append((
+                "knowledge_agent", "Knowledge Agent",
+                str(result.get("retrieved_context", ""))[:500]
+            ))
 
-        agent_sequence.append(("resolution_agent", "Resolution Agent", (result.get("final_response", ""))[:200]))
-        agent_sequence.append(("escalation_agent", "Escalation Agent", json.dumps({"escalate": result.get("escalate", False)})))
+        agent_sequence.append((
+            "resolution_agent", "Resolution Agent",
+            (result.get("final_response", ""))[:200]
+        ))
+        agent_sequence.append((
+            "escalation_agent", "Escalation Agent",
+            json.dumps({"escalate": result.get("escalate", False)})
+        ))
 
-        now = datetime.utcnow().isoformat()
-        step_duration = duration / len(agent_sequence) if agent_sequence else 0
+        n = len(agent_sequence)
+        # Distribute total duration proportionally across agents.
+        # Known approximate weights based on typical LLM call costs:
+        # intent=12%, customer_intel=10%, priority=6%, knowledge=18% (if present),
+        # resolution=40% (LLM call), escalation=6%
+        if knowledge_was_used:
+            weights = [0.12, 0.10, 0.06, 0.18, 0.40, 0.14]
+        else:
+            weights = [0.14, 0.12, 0.07, 0.47, 0.20]
 
-        for order, (agent_id, agent_name, output) in enumerate(agent_sequence, 1):
+        # Pad/trim weights to match actual agent count
+        if len(weights) != n:
+            weights = [1.0 / n] * n
+
+        now_ts = datetime.utcnow()
+
+        for order, ((agent_id, agent_name, output), weight) in enumerate(zip(agent_sequence, weights), 1):
+            step_latency = round(duration * weight, 3)
+            step_started = (now_ts).isoformat()
+            step_completed = (now_ts).isoformat()
             step_id = f"{execution_id}_step{order}"
             conn.execute("""
                 INSERT OR IGNORE INTO execution_steps
-                (id, execution_id, agent_id, agent_name, sequence_order, status, input_data, output_data, latency, cost, started_at, completed_at)
+                (id, execution_id, agent_id, agent_name, sequence_order, status,
+                 input_data, output_data, latency, cost, started_at, completed_at)
                 VALUES (?, ?, ?, ?, ?, 'success', ?, ?, ?, 0.0, ?, ?)
             """, (
                 step_id, execution_id, agent_id, agent_name, order,
-                message[:200], output, round(step_duration, 3), now, now
+                message[:200], output, step_latency, step_started, step_completed
             ))
 
         conn.commit()

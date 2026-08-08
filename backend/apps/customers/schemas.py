@@ -18,11 +18,19 @@ class Sentiment(str, Enum):
     NEGATIVE = "negative"
 
 class CustomerResponse(BaseModel):
+    # SupportFlow identity
     id: str
     name: Optional[str] = None
     email: str
+    # Company DB mapping — null if not yet linked
+    company_customer_id: Optional[str] = None
+    # SupportFlow-derived fields
     tier: CustomerTier
     sentiment: Sentiment
+    # Support counters (from SupportFlow DB)
+    total_conversations: int = 0
+    resolved_conversations: int = 0
+    # Computed/stored fields — may be 0 if not yet calculated
     total_tickets: int = 0
     resolved_tickets: int = 0
     avg_response_time: float = 0.0

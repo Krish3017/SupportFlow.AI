@@ -57,6 +57,21 @@ class EmailRepository(BaseRepository):
 
         return result
 
+    def get_linked_ticket(self, conversation_id: str) -> Optional[Dict]:
+        """
+        Look up a ticket that is linked to the given conversation.
+        Returns None if no ticket exists (most conversations are not escalated).
+        """
+        if not conversation_id:
+            return None
+        query = """
+            SELECT id, subject, status, priority, created_at
+            FROM tickets
+            WHERE conversation_id = ?
+            LIMIT 1
+        """
+        return self._execute_query(query, (conversation_id,), fetch_one=True)
+
     def update_status(self, email_id: int, status: str, ai_response: Optional[str] = None) -> None:
         if ai_response:
             query = "UPDATE email_tickets SET status = ?, ai_response = ? WHERE id = ?"

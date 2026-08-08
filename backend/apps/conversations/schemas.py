@@ -37,7 +37,9 @@ class ConversationResponse(BaseModel):
     customer: CustomerSummary
     channel: Channel
     status: ConversationStatus
+    # subject is stored in the DB but may be NULL — never faked
     subject: Optional[str] = None
+    # ticket_id only present when conversation was escalated and a ticket was created
     ticket_id: Optional[str] = None
     message_count: int
     started_at: datetime
@@ -48,6 +50,7 @@ class ConversationDetailResponse(ConversationResponse):
     messages: List[MessageResponse]
     session_id: Optional[str] = None
     resolved_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
 
 
 class ConversationListResponse(BaseModel):

@@ -88,6 +88,7 @@ class ObservatoryRepository(BaseRepository):
             SELECT
                 e.id,
                 e.conversation_id,
+                c.contact_id as customer_id,
                 e.message_id,
                 e.status,
                 e.started_at,
@@ -95,9 +96,12 @@ class ObservatoryRepository(BaseRepository):
                 e.total_duration,
                 e.confidence,
                 e.intent,
+                e.sentiment,
+                e.priority,
                 e.escalated,
                 (SELECT COUNT(*) FROM execution_steps s WHERE s.execution_id = e.id) as step_count
             FROM executions e
+            LEFT JOIN conversations c ON c.id = e.conversation_id
             WHERE 1=1
         """
         params = []
@@ -133,8 +137,23 @@ class ObservatoryRepository(BaseRepository):
 
     def get_execution_detail(self, execution_id: str) -> Dict:
         exec_query = """
-            SELECT id, message_id, conversation_id, status, started_at, completed_at, total_duration, confidence, intent
-            FROM executions WHERE id = ?
+            SELECT
+                e.id,
+                e.message_id,
+                e.conversation_id,
+                c.contact_id as customer_id,
+                e.status,
+                e.started_at,
+                e.completed_at,
+                e.total_duration,
+                e.confidence,
+                e.intent,
+                e.sentiment,
+                e.priority,
+                e.escalated
+            FROM executions e
+            LEFT JOIN conversations c ON c.id = e.conversation_id
+            WHERE e.id = ?
         """
         exec_row = self._execute_query(exec_query, (execution_id,), fetch_one=True)
 

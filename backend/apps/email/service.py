@@ -5,6 +5,7 @@ from .schemas import (
     EmailDetailResponse,
     EmailListResponse,
     EmailStatus,
+    LinkedTicket,
     ReplyResponse
 )
 from services.email_service import EmailService as ResendEmailService
@@ -47,6 +48,20 @@ class EmailAdminService:
 
     def get_email_detail(self, email_id: int) -> EmailDetailResponse:
         data = self.repository.get_email(email_id)
+        conversation_id = data.get('conversation_id')
+
+        # Only look up a ticket if a conversation exists for this email
+        linked_ticket = None
+        if conversation_id:
+            ticket_row = self.repository.get_linked_ticket(conversation_id)
+            if ticket_row:
+                linked_ticket = LinkedTicket(
+                    id=ticket_row['id'],
+                    subject=ticket_row['subject'],
+                    status=ticket_row['status'],
+                    priority=ticket_row['priority'],
+                    created_at=ticket_row['created_at']
+                )
 
         return EmailDetailResponse(
             id=data['id'],
@@ -57,7 +72,8 @@ class EmailAdminService:
             status=EmailStatus(data['status']),
             ai_response=data.get('ai_response'),
             created_at=data['created_at'],
-            linked_ticket=None
+            conversation_id=conversation_id,
+            linked_ticket=linked_ticket
         )
 
     def search_emails(self, query: str, limit: int = 20) -> List[EmailResponse]:
@@ -93,5 +109,6 @@ class EmailAdminService:
             body=data['body'],
             status=EmailStatus(data['status']),
             ai_response=data.get('ai_response'),
-            created_at=data['created_at']
+            created_at=data['created_at'],
+            conversation_id=data.get('conversation_id')
         )
