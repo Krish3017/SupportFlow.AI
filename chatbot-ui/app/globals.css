@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Syne:wght@700;800&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -129,43 +130,82 @@
   }
 }
 
-@keyframes spinCubeZ {
-  0% {
-    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);
-  }
-  100% {
-    transform: rotateX(360deg) rotateY(360deg) rotateZ(360deg);
-  }
+/* Sharp & Bold Typography */
+.font-sharp-heading {
+  font-family: 'Space Grotesk', 'Syne', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.04em;
 }
 
-@keyframes progressSweep {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+.text-gradient-sharp {
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 60%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
-@keyframes shimmer {
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-/* Custom Dark Aurora Background, Light Sweep & Noise Grain */
+/* Custom Dark Cyber Canvas Background, Light Sweep & Cyber Grid */
 .bg-aurora-canvas {
-  background-color: #08080a;
+  background-color: #060608;
   position: relative;
   overflow: hidden;
+}
+
+/* Vibrant Grid Overlay for Background Depth */
+.bg-cyber-grid {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 50px 50px;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 30%, transparent 80%);
+  pointer-events: none;
+}
+
+/* Floating Vibrant Ambient Glow Orbs */
+.bg-glow-orb-1 {
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 350px;
+  background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.28) 0%, rgba(139, 92, 246, 0.18) 50%, rgba(6, 6, 8, 0) 80%);
+  filter: blur(50px);
+  pointer-events: none;
+  animation: orbPulse 8s ease-in-out infinite alternate;
+}
+
+.bg-glow-orb-2 {
+  position: absolute;
+  bottom: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 700px;
+  height: 300px;
+  background: radial-gradient(ellipse at center, rgba(124, 58, 237, 0.22) 0%, rgba(59, 130, 246, 0.15) 50%, rgba(6, 6, 8, 0) 80%);
+  filter: blur(60px);
+  pointer-events: none;
+  animation: orbPulse 10s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes orbPulse {
+  0% {
+    transform: translateX(-50%) scale(0.95);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateX(-50%) scale(1.1);
+    opacity: 1;
+  }
 }
 
 .aurora-layer-1 {
   position: absolute;
   inset: -20%;
   background: 
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(99, 102, 241, 0.18) 0%, rgba(139, 92, 246, 0.12) 45%, rgba(8, 8, 10, 0) 80%),
-    radial-gradient(ellipse 60% 40% at 50% 110%, rgba(124, 58, 237, 0.15) 0%, rgba(59, 130, 246, 0.08) 50%, rgba(8, 8, 10, 0) 85%);
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(99, 102, 241, 0.22) 0%, rgba(139, 92, 246, 0.15) 45%, rgba(6, 6, 8, 0) 80%),
+    radial-gradient(ellipse 60% 40% at 50% 110%, rgba(124, 58, 237, 0.18) 0%, rgba(59, 130, 246, 0.12) 50%, rgba(6, 6, 8, 0) 85%);
   filter: blur(60px);
   pointer-events: none;
   animation: auroraMove 14s ease-in-out infinite alternate;
@@ -181,9 +221,9 @@
   background: linear-gradient(
     45deg,
     transparent 45%,
-    rgba(168, 85, 247, 0.03) 49%,
-    rgba(192, 132, 252, 0.06) 50%,
-    rgba(168, 85, 247, 0.03) 51%,
+    rgba(168, 85, 247, 0.04) 49%,
+    rgba(192, 132, 252, 0.08) 50%,
+    rgba(168, 85, 247, 0.04) 51%,
     transparent 55%
   );
   pointer-events: none;

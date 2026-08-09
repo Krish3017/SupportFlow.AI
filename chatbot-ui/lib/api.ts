@@ -166,6 +166,16 @@ export interface AuthUser {
   company_customer_id?: string;
 }
 
+function extractApiError(data: any, fallback: string): string {
+  if (typeof data?.detail === 'string') return data.detail;
+  if (typeof data?.detail?.error === 'string') return data.detail.error;
+  if (typeof data?.detail?.message === 'string') return data.detail.message;
+  if (typeof data?.error?.message === 'string') return data.error.message;
+  if (typeof data?.error === 'string') return data.error;
+  if (typeof data?.message === 'string') return data.message;
+  return fallback;
+}
+
 export async function registerCustomer(email: string, password: string, name?: string): Promise<{ token: string; user: AuthUser }> {
   const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
     method: 'POST',
@@ -174,7 +184,7 @@ export async function registerCustomer(email: string, password: string, name?: s
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error?.message || data.detail || 'Registration failed.');
+    throw new Error(extractApiError(data, 'Registration failed.'));
   }
   return data.data;
 }
@@ -187,10 +197,11 @@ export async function loginCustomer(email: string, password: string): Promise<{ 
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error?.message || data.detail || 'Login failed.');
+    throw new Error(extractApiError(data, 'Login failed. Invalid email or password.'));
   }
   return data.data;
 }
+
 
 export async function logoutCustomer(token?: string): Promise<void> {
   try {

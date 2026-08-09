@@ -181,8 +181,14 @@ export function ChatContainer() {
       setIsRestoring(true);
       restoreSession();
     } catch (err: any) {
-      setAuthError(err.message || 'Authentication failed.');
+      const errMsg = typeof err === 'string'
+        ? err
+        : typeof err?.message === 'string'
+          ? err.message
+          : 'Authentication failed. Invalid email or password.';
+      setAuthError(errMsg);
     }
+
   };
 
   const handleLogout = async () => {
@@ -278,16 +284,25 @@ export function ChatContainer() {
 
   return (
     <div className="w-full h-full flex flex-col relative overflow-hidden bg-aurora-canvas text-zinc-100 font-sans">
+      {/* Unified Screen Canvas Background Layers */}
+      <div className="bg-cyber-grid" />
+      <div className="bg-glow-orb-1" />
+      <div className="bg-glow-orb-2" />
       <div className="aurora-layer-1" />
+      <div className="aurora-light-sweep" />
       <div className="noise-overlay" />
 
-      {/* Top Header Navbar */}
-      <header className="px-6 py-4 border-b border-zinc-800/80 bg-[#08080a]/80 backdrop-blur-xl flex items-center justify-between z-30 shrink-0">
+      {/* Seamless Glass Top Header Navbar */}
+      <header className="px-6 py-3.5 border-b border-zinc-800/40 bg-[#08080a]/70 backdrop-blur-md flex items-center justify-between z-30 shrink-0">
+
+
+
 
         <div>
-          <h2 className="text-base font-semibold text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-base font-sharp-heading text-white tracking-tight flex items-center gap-2">
             SupportFlow AI
           </h2>
+
           <p className="text-[11px] text-zinc-400">
             {authUser ? (
               <span className="text-zinc-300 font-medium">
@@ -332,17 +347,6 @@ export function ChatContainer() {
               Sign In
             </Button>
           )}
-
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="h-8 w-8 text-zinc-400 hover:text-white"
-          >
-            <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <span className="sr-only">Toggle theme</span>
-          </Button>
         </div>
       </header>
 
@@ -460,12 +464,14 @@ export function ChatContainer() {
           </div>
         ) : (
           /* Active Conversation State */
-          <div className="flex-1 flex flex-col overflow-hidden relative">
-            <div className="flex-1 overflow-hidden">
+          <div className="w-full h-full min-h-0 flex flex-col overflow-hidden relative">
+            <div className="flex-1 min-h-0 w-full overflow-hidden flex flex-col">
               <MessageList messages={messages} isLoading={isLoading} />
             </div>
 
-            <div className="p-4 sm:p-6 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent shrink-0">
+            <div className="p-3 sm:p-4 bg-gradient-to-t from-zinc-950 via-zinc-950/90 to-transparent shrink-0 w-full z-20">
+
+
               <div className="max-w-5xl mx-auto w-full">
                 <MessageInput
                   onSendMessage={handleSendMessage}
@@ -476,6 +482,7 @@ export function ChatContainer() {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
