@@ -27,7 +27,7 @@ def get_conversation_service() -> ConversationService:
     return ConversationService()
 
 @router.get("", response_model=SuccessResponse[ConversationListResponse])
-async def list_conversations(
+def list_conversations(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
     customer_id: Optional[str] = None,
@@ -53,7 +53,7 @@ async def list_conversations(
         raise to_http_exception(e)
 
 @router.get("/search", response_model=SuccessResponse[List[ConversationResponse]])
-async def search_conversations(
+def search_conversations(
     q: str = Query(..., min_length=2),
     limit: int = Query(default=20, ge=1, le=50),
     service: ConversationService = Depends(get_conversation_service)
@@ -66,7 +66,7 @@ async def search_conversations(
         raise to_http_exception(e)
 
 @router.get("/{conversation_id}", response_model=SuccessResponse[ConversationDetailResponse])
-async def get_conversation(
+def get_conversation(
     conversation_id: str,
     service: ConversationService = Depends(get_conversation_service)
 ):
@@ -78,7 +78,7 @@ async def get_conversation(
         raise to_http_exception(e)
 
 @router.get("/{conversation_id}/messages", response_model=SuccessResponse[List[MessageResponse]])
-async def get_messages(
+def get_messages(
     conversation_id: str,
     service: ConversationService = Depends(get_conversation_service)
 ):
@@ -88,3 +88,4 @@ async def get_messages(
 
     except SupportFlowException as e:
         raise to_http_exception(e)
+

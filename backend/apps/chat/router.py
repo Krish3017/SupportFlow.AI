@@ -101,9 +101,13 @@ async def chat(
         try:
             start_time = time.time()
 
+            # Flushes HTTP 200 OK headers and initial SSE bytes immediately to client socket
+            yield f"data: {json.dumps({'content': ''})}\n\n"
+
             contact_id = ensure_contact(target_customer_id, "chat")
             conversation_id = get_or_create_conversation(contact_id, "chat", session_id)
             chat_history = get_conversation_messages(conversation_id)
+
 
             user_msg_id = store_user_message(conversation_id, request.message)
             execution_id = create_execution(user_msg_id, conversation_id)

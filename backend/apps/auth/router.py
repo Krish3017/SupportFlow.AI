@@ -110,7 +110,7 @@ from core.admin_auth import create_admin_token, verify_admin_token, require_admi
 import hmac
 
 @router.post("/admin/login", response_model=SuccessResponse[AdminAuthResponse])
-async def admin_login(
+def admin_login(
     request: AdminLoginRequest,
     response: Response
 ):
@@ -133,7 +133,7 @@ async def admin_login(
 
 
 @router.post("/admin/logout", response_model=SuccessResponse[dict])
-async def admin_logout(response: Response):
+def admin_logout(response: Response):
     response.delete_cookie(
         key=ADMIN_SESSION_COOKIE_NAME,
         secure=settings.COOKIE_SECURE,
@@ -143,5 +143,6 @@ async def admin_logout(response: Response):
 
 
 @router.get("/admin/me", response_model=SuccessResponse[dict])
-async def admin_me(is_admin: bool = Depends(require_admin_auth)):
+def admin_me(is_admin: bool = Depends(require_admin_auth)):
     return success(data={"username": settings.ADMIN_USERNAME, "role": "admin"})
+

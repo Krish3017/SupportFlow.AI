@@ -27,7 +27,7 @@ def get_observatory_service() -> ObservatoryService:
     return ObservatoryService()
 
 @router.get("/agents", response_model=SuccessResponse[AgentListResponse])
-async def list_agents(
+def list_agents(
     service: ObservatoryService = Depends(get_observatory_service)
 ):
     try:
@@ -38,7 +38,7 @@ async def list_agents(
         raise to_http_exception(e)
 
 @router.get("/agents/{agent_name}", response_model=SuccessResponse[AgentDetailResponse])
-async def get_agent(
+def get_agent(
     agent_name: str,
     service: ObservatoryService = Depends(get_observatory_service)
 ):
@@ -50,7 +50,7 @@ async def get_agent(
         raise to_http_exception(e)
 
 @router.get("/executions", response_model=SuccessResponse[ExecutionListResponse])
-async def list_executions(
+def list_executions(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
     agent_id: Optional[str] = None,
@@ -74,7 +74,7 @@ async def list_executions(
         raise to_http_exception(e)
 
 @router.get("/executions/{execution_id}", response_model=SuccessResponse[ExecutionDetailResponse])
-async def get_execution(
+def get_execution(
     execution_id: str,
     service: ObservatoryService = Depends(get_observatory_service)
 ):
@@ -86,7 +86,7 @@ async def get_execution(
         raise to_http_exception(e)
 
 @router.get("/executions/{execution_id}/timeline", response_model=SuccessResponse[List[ExecutionStepResponse]])
-async def get_execution_timeline(
+def get_execution_timeline(
     execution_id: str,
     service: ObservatoryService = Depends(get_observatory_service)
 ):
@@ -96,3 +96,4 @@ async def get_execution_timeline(
 
     except SupportFlowException as e:
         raise to_http_exception(e)
+

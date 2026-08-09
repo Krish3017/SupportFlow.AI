@@ -32,9 +32,21 @@ validate_required_settings()
 async def lifespan(app: FastAPI):
     logger.info("Initializing application resources...")
     init_postgres_pool()
+
+    def _prewarm():
+        try:
+            from agents.knowledge_agent import get_embeddings
+            logger.info("Pre-warming HuggingFace embeddings model in background...")
+            get_embeddings()
+            logger.info("HuggingFace embeddings model pre-warmed successfully.")
+        except Exception as e:
+            logger.warning(f"Embeddings pre-warm notice: {e}")
+
+    asyncio.create_task(asyncio.to_thread(_prewarm))
     yield
     logger.info("Shutting down application resources...")
     close_postgres_pool()
+
 
 
 app = FastAPI(

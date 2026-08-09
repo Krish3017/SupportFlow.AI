@@ -11,7 +11,10 @@ from core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+import threading
+
 _pool: Optional[ConnectionPool] = None
+_pool_lock = threading.Lock()
 
 
 def parse_db_url(db_url: str):
@@ -47,33 +50,37 @@ def parse_db_url(db_url: str):
 
 def init_postgres_pool() -> Optional[ConnectionPool]:
     """
-    Initialize global ConnectionPool for PostgreSQL connections.
+    Initialize global ConnectionPool for PostgreSQL connections in a thread-safe manner.
     """
     global _pool
     if _pool is not None:
         return _pool
 
-    db_url = settings.DATABASE_URL
-    if not db_url:
-        logger.warning("DATABASE_URL is not set in environment configuration.")
-        return None
+    with _pool_lock:
+        if _pool is not None:
+            return _pool
 
-    try:
-        user, password, host, port, dbname = parse_db_url(db_url)
-        conninfo = f"user={user} password={password} host={host} port={port} dbname={dbname} sslmode=require"
+        db_url = settings.DATABASE_URL
+        if not db_url:
+            logger.warning("DATABASE_URL is not set in environment configuration.")
+            return None
 
-        _pool = ConnectionPool(
-            conninfo=conninfo,
-            min_size=2,
-            max_size=20,
-            kwargs={"row_factory": dict_row, "autocommit": True},
-            open=True,
-        )
-        logger.info("PostgreSQL ConnectionPool initialized successfully (min_size=2, max_size=20).")
-        return _pool
-    except Exception as e:
-        logger.error(f"Failed to initialize PostgreSQL ConnectionPool: {e}")
-        return None
+        try:
+            user, password, host, port, dbname = parse_db_url(db_url)
+            conninfo = f"user={user} password={password} host={host} port={port} dbname={dbname} sslmode=require"
+
+            _pool = ConnectionPool(
+                conninfo=conninfo,
+                min_size=5,
+                max_size=20,
+                kwargs={"row_factory": dict_row, "autocommit": True},
+                open=True,
+            )
+            logger.info("PostgreSQL ConnectionPool initialized successfully (min_size=5, max_size=20).")
+            return _pool
+        except Exception as e:
+            logger.error(f"Failed to initialize PostgreSQL ConnectionPool: {e}")
+            return None
 
 
 
@@ -121,7 +128,8 @@ class PooledConnProxy:
         self.close()
 
 
-def get_postgres_connection() -> psycopg.Connection:
+def get_postgres_connection(timeout: float = 10.0) -> psycopg.Connection:
+
     """
     Acquire a connection from the global ConnectionPool wrapped in PooledConnProxy.
     Calls init_postgres_pool() lazily if pool is not yet initialized.
@@ -131,11 +139,15 @@ def get_postgres_connection() -> psycopg.Connection:
     if _pool is None:
         init_postgres_pool()
 
+    if _pool is None:
+        raise RuntimeError("PostgreSQL ConnectionPool is not initialized.")
+
     try:
-        raw_conn = _pool.getconn()
+        raw_conn = _pool.getconn(timeout=timeout)
         return PooledConnProxy(raw_conn, _pool)
     except Exception as e:
         logger.error(f"Failed to acquire connection from PostgreSQL pool: {e}")
         raise RuntimeError(f"PostgreSQL pool connection error: {e}") from e
+
 
 

@@ -28,7 +28,7 @@ def get_customer_service() -> CustomerService:
     return CustomerService()
 
 @router.get("", response_model=SuccessResponse[CustomerListResponse])
-async def list_customers(
+def list_customers(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
     tier: Optional[CustomerTier] = None,
@@ -54,7 +54,7 @@ async def list_customers(
         raise to_http_exception(e)
 
 @router.get("/search", response_model=SuccessResponse[List[CustomerResponse]])
-async def search_customers(
+def search_customers(
     q: str = Query(..., min_length=2),
     limit: int = Query(default=20, ge=1, le=50),
     service: CustomerService = Depends(get_customer_service)
@@ -67,7 +67,7 @@ async def search_customers(
         raise to_http_exception(e)
 
 @router.get("/{customer_id}", response_model=SuccessResponse[CustomerDetailResponse])
-async def get_customer(
+def get_customer(
     customer_id: str,
     service: CustomerService = Depends(get_customer_service)
 ):
@@ -79,7 +79,7 @@ async def get_customer(
         raise to_http_exception(e)
 
 @router.get("/{customer_id}/tickets", response_model=SuccessResponse[List[TicketSummary]])
-async def get_customer_tickets(
+def get_customer_tickets(
     customer_id: str,
     service: CustomerService = Depends(get_customer_service)
 ):
@@ -91,7 +91,7 @@ async def get_customer_tickets(
         raise to_http_exception(e)
 
 @router.get("/{customer_id}/conversations", response_model=SuccessResponse[List[ConversationSummary]])
-async def get_customer_conversations(
+def get_customer_conversations(
     customer_id: str,
     service: CustomerService = Depends(get_customer_service)
 ):
@@ -101,3 +101,4 @@ async def get_customer_conversations(
 
     except SupportFlowException as e:
         raise to_http_exception(e)
+

@@ -23,7 +23,7 @@ def get_email_service() -> EmailAdminService:
     return EmailAdminService()
 
 @router.get("", response_model=SuccessResponse[EmailListResponse])
-async def list_emails(
+def list_emails(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
     status: Optional[EmailStatus] = None,
@@ -42,7 +42,7 @@ async def list_emails(
         raise to_http_exception(e)
 
 @router.get("/search", response_model=SuccessResponse[List[EmailResponse]])
-async def search_emails(
+def search_emails(
     q: str = Query(..., min_length=2),
     limit: int = Query(default=20, ge=1, le=50),
     service: EmailAdminService = Depends(get_email_service)
@@ -54,7 +54,7 @@ async def search_emails(
         raise to_http_exception(e)
 
 @router.get("/{email_id}", response_model=SuccessResponse[EmailDetailResponse])
-async def get_email(
+def get_email(
     email_id: int,
     service: EmailAdminService = Depends(get_email_service)
 ):
@@ -65,7 +65,7 @@ async def get_email(
         raise to_http_exception(e)
 
 @router.post("/reply", response_model=SuccessResponse[ReplyResponse])
-async def send_reply(
+def send_reply(
     request: ReplyRequest,
     service: EmailAdminService = Depends(get_email_service)
 ):
@@ -80,7 +80,7 @@ async def send_reply(
         raise to_http_exception(e)
 
 @router.post("/{email_id}/retry", response_model=SuccessResponse[ReplyResponse])
-async def retry_email(
+def retry_email(
     email_id: int,
     service: EmailAdminService = Depends(get_email_service)
 ):
@@ -89,3 +89,4 @@ async def retry_email(
         return success(data=result)
     except SupportFlowException as e:
         raise to_http_exception(e)
+

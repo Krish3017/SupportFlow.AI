@@ -33,7 +33,7 @@ def get_ticket_service() -> TicketService:
     return TicketService()
 
 @router.get("", response_model=SuccessResponse[TicketListResponse])
-async def list_tickets(
+def list_tickets(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
     status: Optional[Status] = None,
@@ -42,16 +42,6 @@ async def list_tickets(
     search: Optional[str] = None,
     service: TicketService = Depends(get_ticket_service)
 ):
-    """
-    List tickets with filters and pagination
-
-    - **page**: Page number (1-indexed)
-    - **limit**: Items per page (max 100)
-    - **status**: Filter by status (new, in_progress, resolved, escalated)
-    - **priority**: Filter by priority (critical, high, medium, low)
-    - **channel**: Filter by channel (email, chat, telegram)
-    - **search**: Search in ticket subject
-    """
     try:
         result = service.list_tickets(
             status=status.value if status else None,
@@ -67,19 +57,10 @@ async def list_tickets(
         raise to_http_exception(e)
 
 @router.get("/{ticket_id}", response_model=SuccessResponse[TicketDetailResponse])
-async def get_ticket(
+def get_ticket(
     ticket_id: str,
     service: TicketService = Depends(get_ticket_service)
 ):
-    """
-    Get detailed ticket information
-
-    Includes:
-    - Basic ticket info
-    - Full conversation history
-    - Agent execution trace
-    - Total latency and cost
-    """
     try:
         ticket = service.get_ticket_detail(ticket_id)
         return success(data=ticket)
@@ -88,16 +69,11 @@ async def get_ticket(
         raise to_http_exception(e)
 
 @router.patch("/{ticket_id}/status", response_model=SuccessResponse[dict])
-async def update_ticket_status(
+def update_ticket_status(
     ticket_id: str,
     request: UpdateTicketStatusRequest,
     service: TicketService = Depends(get_ticket_service)
 ):
-    """
-    Update ticket status
-
-    Valid statuses: new, in_progress, resolved, escalated
-    """
     try:
         service.update_ticket_status(ticket_id, request.status.value)
         return success(
@@ -107,3 +83,4 @@ async def update_ticket_status(
 
     except SupportFlowException as e:
         raise to_http_exception(e)
+

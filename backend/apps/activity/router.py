@@ -22,7 +22,7 @@ def get_activity_service() -> ActivityService:
     return ActivityService()
 
 @router.get("", response_model=SuccessResponse[ActivityListResponse])
-async def list_activities(
+def list_activities(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
     type: Optional[ActivityType] = None,
@@ -43,7 +43,7 @@ async def list_activities(
         raise to_http_exception(e)
 
 @router.get("/search", response_model=SuccessResponse[List[ActivityResponse]])
-async def search_activities(
+def search_activities(
     q: str = Query(..., min_length=2),
     limit: int = Query(default=20, ge=1, le=50),
     service: ActivityService = Depends(get_activity_service)
@@ -55,12 +55,12 @@ async def search_activities(
         raise to_http_exception(e)
 
 @router.get("/{activity_id}", response_model=SuccessResponse[ActivityResponse])
-async def get_activity(
+def get_activity(
     activity_id: int,
     service: ActivityService = Depends(get_activity_service)
 ):
     try:
-        result = service.get_activity(activity_id)
+        result = service.get_activity_detail(activity_id)
         return success(data=result)
     except SupportFlowException as e:
         raise to_http_exception(e)

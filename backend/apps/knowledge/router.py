@@ -39,7 +39,7 @@ class SearchRequest(BaseModel):
     k: int = 5
 
 @router.get("/documents", response_model=SuccessResponse[DocumentListResponse])
-async def list_documents(
+def list_documents(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=100),
     type: Optional[DocumentType] = None,
@@ -61,7 +61,7 @@ async def list_documents(
         raise to_http_exception(e)
 
 @router.get("/statistics", response_model=SuccessResponse[StatisticsResponse])
-async def get_statistics(
+def get_statistics(
     service: KnowledgeService = Depends(get_knowledge_service)
 ):
     try:
@@ -72,7 +72,7 @@ async def get_statistics(
         raise to_http_exception(e)
 
 @router.get("/documents/{document_id}", response_model=SuccessResponse[DocumentDetailResponse])
-async def get_document(
+def get_document(
     document_id: str,
     service: KnowledgeService = Depends(get_knowledge_service)
 ):
@@ -84,7 +84,7 @@ async def get_document(
         raise to_http_exception(e)
 
 @router.get("/documents/{document_id}/chunks", response_model=SuccessResponse[List[ChunkResponse]])
-async def get_document_chunks(
+def get_document_chunks(
     document_id: str,
     service: KnowledgeService = Depends(get_knowledge_service)
 ):
@@ -96,7 +96,7 @@ async def get_document_chunks(
         raise to_http_exception(e)
 
 @router.post("/upload", response_model=SuccessResponse[UploadResponse])
-async def upload_document(
+def upload_document(
     request: UploadRequest,
     service: KnowledgeService = Depends(get_knowledge_service)
 ):
@@ -112,7 +112,7 @@ async def upload_document(
         raise to_http_exception(e)
 
 @router.delete("/documents/{document_id}", response_model=SuccessResponse[dict])
-async def delete_document(
+def delete_document(
     document_id: str,
     service: KnowledgeService = Depends(get_knowledge_service)
 ):
@@ -124,7 +124,7 @@ async def delete_document(
         raise to_http_exception(e)
 
 @router.post("/search", response_model=SuccessResponse[SearchResultResponse])
-async def search_knowledge(
+def search_knowledge(
     request: SearchRequest,
     service: KnowledgeService = Depends(get_knowledge_service)
 ):
@@ -134,3 +134,4 @@ async def search_knowledge(
 
     except SupportFlowException as e:
         raise to_http_exception(e)
+
