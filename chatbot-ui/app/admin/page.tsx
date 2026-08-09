@@ -279,7 +279,8 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="p-3 rounded-lg bg-[#09090b] border border-zinc-800 flex items-center justify-between font-semibold">
-                <span className="text-zinc-200">Vector Knowledge (Chroma)</span>
+                <span className="text-zinc-200">Vector Knowledge (pgvector)</span>
+
                 <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-700/60 px-2.5 py-0.5 rounded-full">
                   Active
                 </span>

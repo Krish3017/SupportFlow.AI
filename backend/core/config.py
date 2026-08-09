@@ -56,8 +56,6 @@ class Settings(BaseSettings):
     GMAIL_TOKEN_PATH: str = os.getenv("GMAIL_TOKEN_PATH", "token.json")
     EMAIL_POLL_INTERVAL_MINUTES: int = int(os.getenv("EMAIL_POLL_INTERVAL_MINUTES", "2"))
 
-    # ChromaDB
-    CHROMA_DB_PATH: str = os.getenv("CHROMA_DB_PATH", "./chroma_db")
 
     # Pagination defaults
     DEFAULT_PAGE_SIZE: int = 50

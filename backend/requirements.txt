@@ -9,9 +9,8 @@ langchain-community==0.3.10
 langgraph==0.2.45
 
 # Vector Store & Embeddings
-langchain-chroma==0.1.4
 langchain-huggingface==0.1.2
-chromadb==0.5.23
+
 
 # Data Validation
 pydantic==2.9.2

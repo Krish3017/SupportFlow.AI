@@ -88,8 +88,8 @@ Currently supports:
 ### Shared Infrastructure
 
 * **Groq (LLaMA 3 70B)** → Powers all agents
-* **SQLite** → Customer data, conversations, tickets, and memory
-* **ChromaDB** → Vector store used by the Knowledge Agent
+* **PostgreSQL / Supabase** → Customer data, conversations, tickets, and pgvector embeddings
+* **SQLite** → Local session & legacy storage
 * **Gmail API** → Incoming email ingestion
 * **Resend** → Outgoing customer and escalation emails
 ---
@@ -117,7 +117,7 @@ Currently supports:
 
 * Retrieves information using RAG
 * Searches company knowledge base
-* Uses ChromaDB vector search
+* Uses PostgreSQL pgvector search
 
 ### Resolution Agent
 
@@ -141,8 +141,8 @@ Currently supports:
 * Customer Context Retrieval
 * Ticket Prioritization
 * Human Escalation Workflows
-* SQLite Persistence
-* ChromaDB Vector Search
+* PostgreSQL Persistence & Connection Pooling
+* PostgreSQL pgvector Vector Search
 
 ---
 
@@ -165,7 +165,7 @@ WhatsApp (Coming Soon)
 * LangChain
 * FastAPI
 * Groq (LLaMA 3 70B)
-* ChromaDB
+* PostgreSQL / pgvector
 * SQLite
 * Gmail API
 * Resend
@@ -184,7 +184,6 @@ SupportFlowAI/
 │   ├── services/
 │   ├── state/
 │   ├── data/
-│   ├── chroma_db/
 │   └── main.py
 │
 ├── frontend/
@@ -241,7 +240,8 @@ MANAGER_EMAIL=
 
 DATABASE_PATH=
 
-CHROMA_DB_PATH=
+DATABASE_URL=
+
 ```
 
 ### 4. Run Backend

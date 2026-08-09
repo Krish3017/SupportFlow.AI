@@ -128,7 +128,8 @@ export default function KnowledgePage() {
           <div className="bg-[#111113] border border-zinc-800/80 rounded-xl p-3 flex flex-col justify-between">
             <span className="text-[10px] text-zinc-400 font-medium">Indexed Chunks</span>
             <div className="text-xl font-extrabold text-zinc-50 my-1">{stats.total_chunks || 0}</div>
-            <span className="text-[9px] text-emerald-400 font-medium">Chroma DB Chunks</span>
+            <span className="text-[9px] text-emerald-400 font-medium">pgvector Chunks</span>
+
           </div>
 
           <div className="bg-[#111113] border border-zinc-800/80 rounded-xl p-3 flex flex-col justify-between">

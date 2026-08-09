@@ -234,7 +234,7 @@ Multi-Agent AI Customer Support Platform
 • LangGraph - Multi-agent orchestration
 • FastAPI - High-performance backend
 • Groq - Lightning-fast LLM inference
-• ChromaDB - Vector knowledge base
+• PostgreSQL pgvector - Vector knowledge base
 • SQLite - Session & ticket storage
 • Telegram - Real-time messaging
 

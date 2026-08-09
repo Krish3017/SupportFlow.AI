@@ -299,13 +299,13 @@ export const mockAgents: Agent[] = [
   {
     id: 'knowledge',
     name: 'Knowledge Agent',
-    description: 'Retrieves information using RAG from ChromaDB',
+    description: 'Retrieves information using RAG from Vector DB',
     status: 'degraded',
     successRate: 85.3,
     avgLatency: 4.5,
     totalExecutions: 892,
     failedExecutions: 131,
-    lastError: 'ChromaDB connection timeout (attempt 1/3)',
+    lastError: 'Vector DB connection timeout (attempt 1/3)',
     cost: 8.92,
   },
   {
@@ -487,7 +487,8 @@ export const mockAgentExecutions: AgentExecution[] = [
         input: 'query="How to handle double billing"',
         output: '',
         cost: 0.0042,
-        error: 'ChromaDB connection timeout',
+        error: 'Vector DB connection timeout',
+
       },
       {
         agentId: 'resolution',
@@ -630,7 +631,7 @@ export const mockActivityLog: ActivityLogEntry[] = [
     id: 'LOG005',
     type: 'agent',
     level: 'error',
-    message: 'ChromaDB: Connection timeout (attempt 1/3)',
+    message: 'Vector DB: Connection timeout (attempt 1/3)',
     timestamp: new Date('2026-06-28T10:30:15'),
     metadata: { agent: 'knowledge', ticketId: 'T001' },
   },
@@ -638,7 +639,7 @@ export const mockActivityLog: ActivityLogEntry[] = [
     id: 'LOG006',
     type: 'system',
     level: 'info',
-    message: 'ChromaDB: Reconnected successfully',
+    message: 'Vector DB: Reconnected successfully',
     timestamp: new Date('2026-06-28T10:30:16'),
   },
   {
