@@ -60,7 +60,7 @@ def get_activity(
     service: ActivityService = Depends(get_activity_service)
 ):
     try:
-        result = service.get_activity_detail(activity_id)
+        result = service.get_activity(activity_id)
         return success(data=result)
     except SupportFlowException as e:
         raise to_http_exception(e)

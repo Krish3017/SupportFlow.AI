@@ -7,6 +7,7 @@ class DocumentType(str, Enum):
     PDF = "pdf"
     TXT = "txt"
     MD = "md"
+    UPLOADED = "uploaded"
 
 class DocumentStatus(str, Enum):
     INDEXED = "indexed"

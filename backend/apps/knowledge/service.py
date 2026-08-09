@@ -178,11 +178,21 @@ class KnowledgeService:
         ]
 
     def _to_response(self, data: dict) -> DocumentResponse:
+        try:
+            doc_type = DocumentType(data['type'])
+        except ValueError:
+            doc_type = DocumentType.TXT
+
+        try:
+            doc_status = DocumentStatus(data['status'])
+        except ValueError:
+            doc_status = DocumentStatus.PENDING
+
         return DocumentResponse(
             id=data['id'],
             title=data['title'],
-            type=DocumentType(data['type']),
-            status=DocumentStatus(data['status']),
+            type=doc_type,
+            status=doc_status,
             chunks=data['chunks'],
             retrieval_count=data['retrieval_count'],
             last_updated=str(data['last_updated']),

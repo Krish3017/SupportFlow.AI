@@ -28,7 +28,7 @@ def extract_token(
 
 
 @router.post("/register", response_model=SuccessResponse[AuthTokenResponse])
-async def register(
+def register(
     request: RegisterRequest,
     response: Response,
     service: AuthService = Depends(get_auth_service)
@@ -53,7 +53,7 @@ async def register(
 
 
 @router.post("/login", response_model=SuccessResponse[AuthTokenResponse])
-async def login(
+def login(
     request: LoginRequest,
     response: Response,
     service: AuthService = Depends(get_auth_service)
@@ -77,7 +77,7 @@ async def login(
 
 
 @router.post("/logout", response_model=SuccessResponse[dict])
-async def logout(
+def logout(
     response: Response,
     token: Optional[str] = Depends(extract_token),
     service: AuthService = Depends(get_auth_service)
@@ -93,7 +93,7 @@ async def logout(
 
 
 @router.get("/me", response_model=SuccessResponse[AuthUserResponse])
-async def me(
+def me(
     token: Optional[str] = Depends(extract_token),
     service: AuthService = Depends(get_auth_service)
 ):

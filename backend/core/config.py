@@ -9,6 +9,33 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def parse_cors_origins() -> List[str]:
+    raw = os.getenv("CORS_ORIGINS", "")
+    origins = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+        "https://support-flow-ai-liard.vercel.app"
+    ]
+    if raw:
+        if raw.strip().startswith("[") and raw.strip().endswith("]"):
+            try:
+                import json
+                parsed = json.loads(raw)
+                for item in parsed:
+                    clean = str(item).strip().strip("'").strip('"').rstrip("/")
+                    if clean and clean not in origins:
+                        origins.append(clean)
+            except Exception:
+                pass
+        for item in raw.split(","):
+            clean = item.strip().strip("'").strip('"').rstrip("/")
+            if clean and clean not in origins:
+                origins.append(clean)
+    return origins
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment"""
 
@@ -27,7 +54,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
 
     # CORS & Cookies
-    CORS_ORIGINS: List[str] = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if origin.strip()]
+    CORS_ORIGINS: List[str] = parse_cors_origins()
+
     COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "False").lower() == "true" or os.getenv("ENVIRONMENT", "development").lower() == "production"
     COOKIE_SAMESITE: str = os.getenv("COOKIE_SAMESITE", "lax" if os.getenv("ENVIRONMENT", "development").lower() != "production" else "none")
 
