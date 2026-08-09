@@ -8,7 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Message } from '@/types/chat';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
-import { Moon, Sun, Loader2, UserCheck, LogOut, User } from 'lucide-react';
+import { Moon, Sun, Loader2, LogOut, User, Plus } from 'lucide-react';
+import RuixenMoonChat from '@/components/ui/ruixen-moon-chat';
+
 import {
   sendChatMessage,
   fetchConversationHistory,
@@ -72,16 +74,13 @@ export function ChatContainer() {
     sessionIdRef.current = sessionId;
 
     let currentToken = '';
-    let currentUser: AuthUser | null = null;
 
-    // Check stored auth token
     const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
     if (token) {
       currentToken = token;
       setAuthToken(token);
       const user = await getAuthenticatedCustomer(token);
       if (user) {
-        currentUser = user;
         setAuthUser(user);
       } else {
         localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
@@ -105,7 +104,6 @@ export function ChatContainer() {
         setIsRestoring(false);
         return;
       } else {
-        // Clear stale/unauthorized stored conversation ID
         localStorage.removeItem(STORAGE_KEYS.CONVERSATION_ID);
         conversationIdRef.current = null;
       }
@@ -134,6 +132,29 @@ export function ChatContainer() {
     restoreSession();
   }, [restoreSession]);
 
+  const resetAuthForm = useCallback(() => {
+    setEmailInput('');
+    setPasswordInput('');
+    setNameInput('');
+    setAuthError('');
+  }, []);
+
+  const handleOpenAuthModal = (mode: 'login' | 'register' = 'login') => {
+    resetAuthForm();
+    setAuthMode(mode);
+    setShowAuthModal(true);
+  };
+
+  const handleCloseAuthModal = () => {
+    setShowAuthModal(false);
+    resetAuthForm();
+  };
+
+  const handleSwitchAuthMode = (mode: 'login' | 'register') => {
+    resetAuthForm();
+    setAuthMode(mode);
+  };
+
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
@@ -148,11 +169,8 @@ export function ChatContainer() {
       setAuthUser(res.user);
       localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, res.token);
       setShowAuthModal(false);
-      setEmailInput('');
-      setPasswordInput('');
-      setNameInput('');
+      resetAuthForm();
 
-      // Refresh chat session for newly authenticated customer with a fresh session_id
       localStorage.removeItem(STORAGE_KEYS.CONVERSATION_ID);
       conversationIdRef.current = null;
       const newSessionId = crypto.randomUUID();
@@ -256,38 +274,61 @@ export function ChatContainer() {
     }
   };
 
+  const isLandingState = messages.length === 0 && !isRestoring;
+
   return (
-    <Card className="w-full max-w-4xl h-[650px] flex flex-col shadow-lg relative">
-      {/* Header */}
-      <div className="px-6 py-4 border-b bg-muted/40 flex items-center justify-between">
+    <div className="w-full h-full flex flex-col relative overflow-hidden bg-aurora-canvas text-zinc-100 font-sans">
+      <div className="aurora-layer-1" />
+      <div className="noise-overlay" />
+
+      {/* Top Header Navbar */}
+      <header className="px-6 py-4 border-b border-zinc-800/80 bg-[#08080a]/80 backdrop-blur-xl flex items-center justify-between z-30 shrink-0">
+
         <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
+          <h2 className="text-base font-semibold text-white tracking-tight flex items-center gap-2">
             SupportFlow AI
           </h2>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[11px] text-zinc-400">
             {authUser ? (
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+              <span className="text-zinc-300 font-medium">
                 Logged in as {authUser.name || authUser.email}
               </span>
             ) : (
-              <span>Guest Session (Login to view account data)</span>
+              <span>Guest Session • Sign in for account options</span>
             )}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleNewChat} className="flex items-center gap-1">
-            New Chat
-          </Button>
+          {messages.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNewChat}
+              className="bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-200 text-xs gap-1 h-8 rounded-xl"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New Chat
+            </Button>
+          )}
 
           {authUser ? (
-            <Button variant="outline" size="sm" onClick={handleLogout} className="flex items-center gap-1">
-              <LogOut className="h-4 w-4" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              className="bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-200 text-xs gap-1.5 h-8 rounded-xl"
+            >
+              <LogOut className="h-3.5 w-3.5" />
               Logout
             </Button>
           ) : (
-            <Button variant="default" size="sm" onClick={() => setShowAuthModal(true)} className="flex items-center gap-1">
-              <User className="h-4 w-4" />
+            <Button
+              size="sm"
+              onClick={() => handleOpenAuthModal('login')}
+              className="bg-white hover:bg-zinc-200 text-zinc-950 font-medium text-xs gap-1.5 h-8 rounded-xl shadow-md"
+            >
+              <User className="h-3.5 w-3.5" />
               Sign In
             </Button>
           )}
@@ -296,27 +337,35 @@ export function ChatContainer() {
             variant="ghost"
             size="icon"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="h-8 w-8 text-zinc-400 hover:text-white"
           >
-            <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             <span className="sr-only">Toggle theme</span>
           </Button>
         </div>
-      </div>
+      </header>
 
       {/* Auth Modal Overlay */}
       {showAuthModal && (
-        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card className="w-full max-w-md p-6 shadow-2xl bg-card border">
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-6 bg-zinc-900 border-zinc-800 text-white shadow-2xl rounded-2xl">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">
+              <h3 className="text-base font-semibold text-zinc-200">
                 {authMode === 'login' ? 'Customer Login' : 'Create Customer Account'}
               </h3>
-              <Button variant="ghost" size="sm" onClick={() => setShowAuthModal(false)}>✕</Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCloseAuthModal}
+                className="text-zinc-400 hover:text-white"
+              >
+                ✕
+              </Button>
             </div>
 
             {authError && (
-              <div className="mb-4 p-2 text-xs bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 rounded">
+              <div className="mb-4 p-2.5 text-xs bg-red-950/80 border border-red-500/40 text-red-300 rounded-lg">
                 {authError}
               </div>
             )}
@@ -324,50 +373,56 @@ export function ChatContainer() {
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               {authMode === 'register' && (
                 <div>
-                  <label className="text-xs font-medium block mb-1">Full Name</label>
+                  <label className="text-xs font-medium block mb-1 text-zinc-300">Full Name</label>
                   <Input
                     type="text"
                     placeholder="Alice Johnson"
                     value={nameInput}
                     onChange={(e) => setNameInput(e.target.value)}
+                    autoComplete="name"
+                    className="bg-zinc-950 border-zinc-800 text-white placeholder:text-zinc-500"
                   />
                 </div>
               )}
 
               <div>
-                <label className="text-xs font-medium block mb-1">Email Address</label>
+                <label className="text-xs font-medium block mb-1 text-zinc-300">Email Address</label>
                 <Input
                   type="email"
                   required
                   placeholder="alice.johnson@example.com"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
+                  autoComplete="email"
+                  className="bg-zinc-950 border-zinc-800 text-white placeholder:text-zinc-500"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium block mb-1">Password</label>
+                <label className="text-xs font-medium block mb-1 text-zinc-300">Password</label>
                 <Input
                   type="password"
                   required
                   placeholder="••••••••"
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
+                  autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+                  className="bg-zinc-950 border-zinc-800 text-white placeholder:text-zinc-500"
                 />
               </div>
 
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full bg-white hover:bg-zinc-200 text-zinc-950 font-medium">
                 {authMode === 'login' ? 'Sign In' : 'Register Account'}
               </Button>
             </form>
 
-            <div className="mt-4 text-center text-xs">
+            <div className="mt-4 text-center text-xs text-zinc-400">
               {authMode === 'login' ? (
                 <span>
                   Don't have an account?{' '}
                   <button
-                    className="text-primary underline font-medium"
-                    onClick={() => { setAuthMode('register'); setAuthError(''); }}
+                    className="text-zinc-200 underline font-medium hover:text-white ml-1"
+                    onClick={() => handleSwitchAuthMode('register')}
                   >
                     Register
                   </button>
@@ -376,8 +431,8 @@ export function ChatContainer() {
                 <span>
                   Already have an account?{' '}
                   <button
-                    className="text-primary underline font-medium"
-                    onClick={() => { setAuthMode('login'); setAuthError(''); }}
+                    className="text-zinc-200 underline font-medium hover:text-white ml-1"
+                    onClick={() => handleSwitchAuthMode('login')}
                   >
                     Sign In
                   </button>
@@ -388,18 +443,42 @@ export function ChatContainer() {
         </div>
       )}
 
-      {/* Chat Messages */}
-      <div className="flex-1 overflow-hidden">
+
+      {/* Main Content Area */}
+      <div className="flex-1 relative overflow-hidden flex flex-col z-10">
         {isRestoring ? (
           <div className="h-full flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+          </div>
+        ) : isLandingState ? (
+          /* Initial SupportFlow AI Landing Hero State */
+          <div className="flex-1 w-full h-full relative overflow-hidden">
+            <RuixenMoonChat
+              onSendMessage={handleSendMessage}
+              disabled={isLoading || isRestoring}
+            />
           </div>
         ) : (
-          <MessageList messages={messages} />
+          /* Active Conversation State */
+          <div className="flex-1 flex flex-col overflow-hidden relative">
+            <div className="flex-1 overflow-hidden">
+              <MessageList messages={messages} isLoading={isLoading} />
+            </div>
+
+            <div className="p-4 sm:p-6 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent shrink-0">
+              <div className="max-w-5xl mx-auto w-full">
+                <MessageInput
+                  onSendMessage={handleSendMessage}
+                  disabled={isLoading || isRestoring}
+                  placeholder="Type your request..."
+                />
+              </div>
+            </div>
+          </div>
         )}
       </div>
-
-      <MessageInput onSendMessage={handleSendMessage} disabled={isLoading || isRestoring} />
-    </Card>
+    </div>
   );
 }
+
+

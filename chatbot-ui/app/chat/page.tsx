@@ -2,8 +2,8 @@ import { ChatContainer } from '@/components/chat/ChatContainer';
 
 export default function ChatPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-muted/20 to-background p-4">
+    <main className="w-screen h-screen overflow-hidden bg-ruixen-glow text-slate-100 flex flex-col relative dark">
       <ChatContainer />
-    </div>
+    </main>
   );
 }

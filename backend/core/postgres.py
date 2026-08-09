@@ -1,46 +1,136 @@
 """
 PostgreSQL Connection Helper (Supabase)
-Provides production-safe PostgreSQL connection management via psycopg v3.
+Provides production-safe PostgreSQL connection management via psycopg v3 and psycopg_pool.
 """
 from typing import Optional
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 from core.config import settings
 from core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+_pool: Optional[ConnectionPool] = None
 
-def get_postgres_connection() -> psycopg.Connection:
+
+def parse_db_url(db_url: str):
+    clean_url = db_url.strip()
+    if clean_url.startswith("postgresql://") or clean_url.startswith("postgres://"):
+        scheme_rest = clean_url.split("://", 1)[1]
+        userpass, hostportdb = scheme_rest.rsplit("@", 1)
+
+        if ":" in userpass:
+            user, password = userpass.split(":", 1)
+        else:
+            user, password = userpass, ""
+
+        password = password.strip("[").strip("]")
+
+        if "/" in hostportdb:
+            hostport, dbname = hostportdb.split("/", 1)
+        else:
+            hostport, dbname = hostportdb, "postgres"
+
+        if ":" in hostport:
+            host, port_str = hostport.split(":", 1)
+            port = int(port_str)
+        else:
+            host, port = hostport, 5432
+
+        return user, password, host, port, dbname
+    raise ValueError("Invalid PostgreSQL URL format.")
+
+
+def init_postgres_pool() -> ConnectionPool:
     """
-    Establish and return a new connection to Supabase PostgreSQL.
-    Raises ValueError if DATABASE_URL is not configured.
+    Initialize global ConnectionPool for PostgreSQL connections.
     """
+    global _pool
+    if _pool is not None:
+        return _pool
+
     db_url = settings.DATABASE_URL
     if not db_url:
         raise ValueError("DATABASE_URL is not set in environment configuration.")
 
     try:
-        from urllib.parse import urlparse, unquote
-        clean_url = db_url.strip().replace("[", "").replace("]", "")
-        parsed = urlparse(clean_url)
-        
-        user = unquote(parsed.username) if parsed.username else ""
-        password = unquote(parsed.password) if parsed.password else ""
-        host = unquote(parsed.hostname) if parsed.hostname else ""
-        port = parsed.port or 5432
-        dbname = parsed.path.lstrip("/") or "postgres"
+        user, password, host, port, dbname = parse_db_url(db_url)
+        conninfo = f"user={user} password={password} host={host} port={port} dbname={dbname} sslmode=require"
 
-        conn = psycopg.connect(
-            user=user,
-            password=password,
-            host=host,
-            port=port,
-            dbname=dbname,
-            row_factory=dict_row,
-            autocommit=False
+        _pool = ConnectionPool(
+            conninfo=conninfo,
+            min_size=2,
+            max_size=20,
+            kwargs={"row_factory": dict_row, "autocommit": True},
+            open=True,
         )
-        return conn
+        logger.info("PostgreSQL ConnectionPool initialized successfully (min_size=2, max_size=20).")
+        return _pool
     except Exception as e:
-        logger.error("Failed to connect to Supabase PostgreSQL database.")
-        raise RuntimeError(f"PostgreSQL connection failed: {e}") from e
+        logger.error(f"Failed to initialize PostgreSQL ConnectionPool: {e}")
+        raise RuntimeError(f"PostgreSQL connection pool initialization failed: {e}") from e
+
+
+def close_postgres_pool():
+    """
+    Close global ConnectionPool cleanly during application shutdown.
+    """
+    global _pool
+    if _pool is not None:
+        try:
+            _pool.close()
+            logger.info("PostgreSQL ConnectionPool closed successfully.")
+        except Exception as e:
+            logger.error(f"Error closing PostgreSQL ConnectionPool: {e}")
+        finally:
+            _pool = None
+
+
+class PooledConnProxy:
+    """
+    Proxy wrapper around a psycopg connection acquired from ConnectionPool.
+    Interceptor method close() returns the underlying connection back to the pool via putconn().
+    """
+
+    def __init__(self, conn: psycopg.Connection, pool: ConnectionPool):
+        self._conn = conn
+        self._pool = pool
+        self._returned = False
+
+    def close(self):
+        if not self._returned:
+            self._returned = True
+            try:
+                self._pool.putconn(self._conn)
+            except Exception as e:
+                logger.warning(f"Error returning connection to pool: {e}")
+
+    def __getattr__(self, name: str):
+        return getattr(self._conn, name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+
+def get_postgres_connection() -> psycopg.Connection:
+    """
+    Acquire a connection from the global ConnectionPool wrapped in PooledConnProxy.
+    Calls init_postgres_pool() lazily if pool is not yet initialized.
+    Calling conn.close() on the returned object safely returns it to the pool.
+    """
+    global _pool
+    if _pool is None:
+        init_postgres_pool()
+
+    try:
+        raw_conn = _pool.getconn()
+        return PooledConnProxy(raw_conn, _pool)
+    except Exception as e:
+        logger.error(f"Failed to acquire connection from PostgreSQL pool: {e}")
+        raise RuntimeError(f"PostgreSQL pool connection error: {e}") from e
+
+

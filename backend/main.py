@@ -19,16 +19,31 @@ from apps.activity import router as activity_router
 from apps.email import router as email_router
 from apps.auth import router as auth_router
 
+from contextlib import asynccontextmanager
+from core.postgres import init_postgres_pool, close_postgres_pool
+
 setup_logging(level=settings.LOG_LEVEL)
 logger = get_logger(__name__)
 
 validate_required_settings()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Initializing application resources...")
+    init_postgres_pool()
+    yield
+    logger.info("Shutting down application resources...")
+    close_postgres_pool()
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     description="AI-native customer support platform API",
-    version=settings.APP_VERSION
+    version=settings.APP_VERSION,
+    lifespan=lifespan
 )
+
 
 app.add_middleware(
     CORSMiddleware,

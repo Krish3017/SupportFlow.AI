@@ -118,26 +118,16 @@ async def chat(
             })
 
             duration = time.time() - start_time
-            record_execution_steps(execution_id, result, request.message, duration)
-            complete_execution(execution_id, result, duration)
-
             final_response = result.get("final_response", "I apologize, but I couldn't generate a response.")
 
-            store_assistant_message(conversation_id, final_response, execution_id)
-            create_ticket_on_escalation(conversation_id, contact_id, result)
-            update_contact_stats(contact_id, result)
+            # Critical Persistence: Store assistant message and ticket on escalation
+            try:
+                store_assistant_message(conversation_id, final_response, execution_id)
+                create_ticket_on_escalation(conversation_id, contact_id, result)
+            except Exception as e:
+                logger.error(f"Failed critical conversation persistence: {e}", exc_info=True)
 
-            emit_activity(
-                "conversation",
-                f"[CHAT] {result.get('intent', 'unknown')} from {contact_id}",
-                metadata={
-                    "conversation_id": conversation_id,
-                    "execution_id": execution_id,
-                    "channel": "chat",
-                    "intent": result.get("intent"),
-                }
-            )
-
+            # Stream response chunks to client immediately
             words = final_response.split()
             for word in words:
                 chunk = json.dumps({"content": word + " "})
@@ -145,11 +135,33 @@ async def chat(
 
             yield f"data: {json.dumps({'done': True, 'session_id': session_id, 'conversation_id': conversation_id})}\n\n"
 
+            # Non-critical telemetry and observatory recording (post-stream)
+            try:
+                record_execution_steps(execution_id, result, request.message, duration)
+                complete_execution(execution_id, result, duration)
+                update_contact_stats(contact_id, result)
+                emit_activity(
+                    "conversation",
+                    f"[CHAT] {result.get('intent', 'unknown')} from {contact_id}",
+                    metadata={
+                        "conversation_id": conversation_id,
+                        "execution_id": execution_id,
+                        "channel": "chat",
+                        "intent": result.get("intent"),
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Failed non-critical telemetry persistence: {e}", exc_info=True)
+
         except Exception as e:
             logger.error(f"Chat error: {e}", exc_info=True)
-            emit_activity("system", f"Chat error: {str(e)}", level="error")
+            try:
+                emit_activity("system", f"Chat error: {str(e)}", level="error")
+            except Exception:
+                pass
             yield f"data: {json.dumps({'content': 'Sorry, an error occurred.'})}\n\n"
             yield f"data: {json.dumps({'done': True})}\n\n"
+
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
