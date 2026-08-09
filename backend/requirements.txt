@@ -24,7 +24,7 @@ google-auth-httplib2==0.2.0
 google-auth-oauthlib==1.2.1
 
 # Email Service (Resend)
-resend==2.5.0
+resend==2.5.1
 
 # Telegram Bot
 python-telegram-bot==21.0.1
