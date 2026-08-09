@@ -4,9 +4,10 @@ uvicorn[standard]==0.32.0
 
 # LangChain & LangGraph
 langchain-groq==0.2.1
-langchain-core==0.3.15
+langchain-core==0.3.29
 langchain-community==0.3.10
 langgraph==0.2.45
+
 
 # Vector Store & Embeddings
 langchain-huggingface==0.1.2
