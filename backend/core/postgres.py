@@ -32,6 +32,9 @@ def parse_db_url(db_url: str):
         else:
             hostport, dbname = hostportdb, "postgres"
 
+        if "?" in dbname:
+            dbname = dbname.split("?", 1)[0]
+
         if ":" in hostport:
             host, port_str = hostport.split(":", 1)
             port = int(port_str)
@@ -42,7 +45,7 @@ def parse_db_url(db_url: str):
     raise ValueError("Invalid PostgreSQL URL format.")
 
 
-def init_postgres_pool() -> ConnectionPool:
+def init_postgres_pool() -> Optional[ConnectionPool]:
     """
     Initialize global ConnectionPool for PostgreSQL connections.
     """
@@ -52,7 +55,8 @@ def init_postgres_pool() -> ConnectionPool:
 
     db_url = settings.DATABASE_URL
     if not db_url:
-        raise ValueError("DATABASE_URL is not set in environment configuration.")
+        logger.warning("DATABASE_URL is not set in environment configuration.")
+        return None
 
     try:
         user, password, host, port, dbname = parse_db_url(db_url)
@@ -69,7 +73,8 @@ def init_postgres_pool() -> ConnectionPool:
         return _pool
     except Exception as e:
         logger.error(f"Failed to initialize PostgreSQL ConnectionPool: {e}")
-        raise RuntimeError(f"PostgreSQL connection pool initialization failed: {e}") from e
+        return None
+
 
 
 def close_postgres_pool():

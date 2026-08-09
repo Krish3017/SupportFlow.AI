@@ -9,7 +9,14 @@ logger = logging.getLogger(__name__)
 
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
-embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+_embeddings = None
+
+def get_embeddings():
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    return _embeddings
+
 repo = KnowledgeRepository()
 
 
@@ -21,7 +28,8 @@ async def knowledge_agent_node(state: AgentState) -> AgentState:
     if not message:
         return {"retrieved_context": ""}
 
-    query_vec = embeddings.embed_query(message)
+    query_vec = get_embeddings().embed_query(message)
+
     hits = repo.vector_similarity_search(query_vec, top_k=3)
 
     context = "\n\n".join([h["content"] for h in hits])
