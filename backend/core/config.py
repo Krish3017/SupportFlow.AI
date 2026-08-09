@@ -77,5 +77,10 @@ def validate_required_settings():
     if not settings.RESEND_API_KEY:
         errors.append("RESEND_API_KEY is required")
 
+    if settings.ENVIRONMENT.lower() == "production":
+        if not settings.DATABASE_URL:
+            errors.append("DATABASE_URL is required in production environment")
+
     if errors:
         raise ValueError(f"Configuration errors: {', '.join(errors)}")
+

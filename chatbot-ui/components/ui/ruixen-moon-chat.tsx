@@ -1,7 +1,8 @@
 "use client";
 
 import { MessageInput } from "@/components/chat/MessageInput";
-import { Sparkles, Bot, Zap } from "lucide-react";
+import { Bot, Zap } from "lucide-react";
+
 
 interface RuixenMoonChatProps {
   onSendMessage?: (content: string) => void;

@@ -423,7 +423,8 @@ export function ChatContainer() {
             <div className="mt-4 text-center text-xs text-zinc-400">
               {authMode === 'login' ? (
                 <span>
-                  Don't have an account?{' '}
+                  Don&apos;t have an account?{' '}
+
                   <button
                     className="text-zinc-200 underline font-medium hover:text-white ml-1"
                     onClick={() => handleSwitchAuthMode('register')}
