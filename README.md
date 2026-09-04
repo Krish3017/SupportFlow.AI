@@ -284,7 +284,6 @@ npm run dev
 * Human-in-the-Loop Approvals
 * Business Intelligence Agent
 * Unified Support Dashboard
-* CRM Integrations
 
 ---
 
@@ -296,8 +295,3 @@ The goal is not to build another chatbot.
 
 The goal is to build AI systems that operate more like real teams.
 
----
-
-## License
-
-MIT License
